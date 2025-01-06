@@ -16,9 +16,7 @@ screen_height, screen_width = screenshot.size
 
 cards = utils.find_cards("game_screenshot.bmp",
                          "templates\\cards",
-                         "templates\\partial_cards",
-                         threshold=0.95,
-                         partial_threshold=0.95)
+                         threshold=0.95)
 utils.draw_regions("game_screenshot.bmp", screen_width, screen_height)
 game_state = utils.parse_game_state(cards, screen_width, screen_height)
 print(game_state)

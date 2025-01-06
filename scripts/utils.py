@@ -100,7 +100,7 @@ def find_best_scale(template, screenshot, scales, threshold=0.8):
     return best_scale, best_resized_template
 
 
-def find_cards(screenshot_path, full_templates_dir, partial_templates_dir, threshold=0.8, partial_threshold=0.9):
+def find_cards(screenshot_path, templates_dir, threshold=0.8):
     """
     Detects all cards in a game screenshot using template matching.
 
@@ -118,81 +118,35 @@ def find_cards(screenshot_path, full_templates_dir, partial_templates_dir, thres
 
     detected_cards = []
 
-    def load_templates(template_dir):
-        templates = {}
-        for filename in os.listdir(template_dir):
-            if filename.endswith(".png") or filename.endswith(".jpg"):
-                card_name = os.path.splitext(filename)[0]
-                template_path = os.path.join(template_dir, filename)
-                template = cv2.imread(template_path, cv2.IMREAD_UNCHANGED)
-                if template is not None:
-                    templates[card_name] = template
-                else:
-                    print(f"Warning: Unable to load template {filename}.")
-        return templates
+    # # Loop through each card template
+    for template_name in os.listdir(templates_dir):
+        template_path = os.path.join(templates_dir, template_name)
+        template = cv2.imread(template_path, cv2.IMREAD_COLOR)
 
-    # Load full and partial templates
-    full_templates = load_templates(full_templates_dir)
-    partial_templates = load_templates(partial_templates_dir)
+        gray_template = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
 
-    # Detect fully visible cards
-    for card_name, template in full_templates.items():
+        # Perform template matching
         result = cv2.matchTemplate(screenshot, template, cv2.TM_CCOEFF_NORMED)
         locations = np.where(result >= threshold)
 
-        for (x, y) in zip(locations[1], locations[0]):  # (col, row)
+        # Store matches with their positions
+        card = template_name.replace(".png", "")  # Remove extension for card name
+        card = (card[-1] + card[0]).upper()
+
+        if locations[0].size != 0 and locations[1].size != 0:
+            x, y = np.int64(locations[1][0]), np.int64(locations[0][0])  # Switch x, y for OpenCV format
+            point = (x, y)  # Top-left corner of the matched card
             detected_cards.append({
-                "card": card_name,
-                "position": (x, y),
+                "card": card,
+                "position": point,
             })
 
-    # Detect partially visible cards
-    for card_name, partial_template in partial_templates.items():
-        result = cv2.matchTemplate(screenshot, partial_template, cv2.TM_CCOEFF_NORMED)
-        locations = np.where(result >= partial_threshold)
+            # Draw rectangle on screenshot for debugging
+            h, w = gray_template.shape
+            cv2.rectangle(screenshot, point, (point[0] + w, point[1] + h), (0, 255, 0), 2)
 
-        for (x, y) in zip(locations[1], locations[0]):  # (col, row)
-            detected_cards.append({
-                "card": card_name,
-                "position": (x, y),
-            })
-
-    # Deduplicate overlapping detections
-    detected_cards = deduplicate_detections(detected_cards)
-
-    # # Loop through each card template
-    # for template_name in os.listdir(templates_dir):
-    #     template_path = os.path.join(templates_dir, template_name)
-    #     template = cv2.imread(template_path, cv2.IMREAD_COLOR)
-    #     template = cv2.resize(template, None, fx=81/62, fy=114/90, interpolation=cv2.INTER_AREA)  # Scale template to game resolution
-    #
-    #     # scales = [0.5, 0.75, 1.0, 1.25, 1.5]  # Test different scaling factors
-    #     # best_scale, best_template = find_best_scale(template, screenshot, scales)
-    #     # print(f"Best scale: {best_scale}")
-    #     gray_template = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
-    #
-    #     # Perform template matching
-    #     result = cv2.matchTemplate(screenshot, template, cv2.TM_CCOEFF_NORMED)
-    #     locations = np.where(result >= threshold)
-    #
-    #     # Store matches with their positions
-    #     card = template_name.replace(".png", "")  # Remove extension for card name
-    #     card = (card[-1] + card[0]).upper()
-    #
-    #     if locations[0].size != 0 and locations[1].size != 0:
-    #         x, y = np.int64(locations[1][0]), np.int64(locations[0][0])  # Switch x, y for OpenCV format
-    #         point = (x, y)  # Top-left corner of the matched card
-    #         detected_cards.append({
-    #             "card": card,
-    #             "position": point,
-    #         })
-    #
-    #         # Draw rectangle on screenshot for debugging
-    #         h, w = gray_template.shape
-    #         cv2.rectangle(screenshot, point, (point[0] + w, point[1] + h), (0, 255, 0), 2)
-    #
-    # # Save the screenshot with rectangles for debugging
-    # cv2.imwrite("debug_detected_cards.png", screenshot)
+    # Save the screenshot with rectangles for debugging
+    cv2.imwrite("debug_detected_cards.png", screenshot)
 
     return detected_cards
 
