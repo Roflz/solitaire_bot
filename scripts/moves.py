@@ -21,6 +21,11 @@ def evaluate_moves(game_state):
                     "from_column": column_index,
                     "card": top_card
                 })
+                # Perform Move
+                # Update Game State
+                suit = top_card[1]
+                rank = top_card[0]
+                game_state['foundations'][suit] = rank
 
     # Play waste pile card if possible
     if game_state["waste"]:
