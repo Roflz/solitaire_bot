@@ -12,7 +12,7 @@ def evaluate_moves(game_state):
 
     # Move cards to foundations if possible
     for column_index, column in enumerate(game_state["columns"]):
-        if column:
+        if column:  # If column not empty
             top_card = column[-1]
             if is_playable_on_foundation(top_card, game_state["foundations"]):
                 moves.append({
@@ -22,6 +22,7 @@ def evaluate_moves(game_state):
                     "card": top_card
                 })
                 # Perform Move
+                # Fill this in with UI automated moves
                 # Update Game State
                 suit = top_card[1]
                 rank = top_card[0]
@@ -37,6 +38,12 @@ def evaluate_moves(game_state):
                 "from_column": "waste",
                 "card": top_waste_card
             })
+            # Perform Move
+            # Fill this in with UI automated moves
+            # Update Game State
+            suit = top_waste_card[1]
+            rank = top_waste_card[0]
+            game_state['foundations'][suit] = rank
         elif can_move_to_column(top_waste_card, game_state["columns"]):
             moves.append({
                 "priority": 3,
@@ -45,6 +52,13 @@ def evaluate_moves(game_state):
                 "to_column": get_column_to_move_to(top_waste_card, game_state["columns"]),
                 "card": top_waste_card
             })
+            # Perform Move
+            # Fill this in with UI automated moves
+            # Update Game State
+            suit = top_waste_card[1]
+            rank = top_waste_card[0]
+            game_state['columns'][get_column_to_move_to(top_waste_card, game_state["columns"])].append(top_waste_card)
+
 
     # Uncover hidden cards
     for column_index, column in enumerate(game_state["columns"]):
