@@ -5,9 +5,9 @@ import numpy as np
 import os
 from PIL import Image
 import matplotlib.pyplot as plt
-import win32gui
-import win32ui
-import win32con
+# import win32gui
+# import win32ui
+# import win32con
 
 
 def find_window(window_title):
@@ -39,34 +39,34 @@ def capture_window(x, y, width, height, z):
         return screenshot
 
 
-def capture_window_2(window_name):
-    # Find the window handle
-    hwnd = win32gui.FindWindow(None, window_name)  # Replace with the game's window title
-    if not hwnd:
-        print("Window not found!")
-        return None
-
-    # Get the window dimensions
-    left, top, right, bottom = win32gui.GetWindowRect(hwnd)
-    width = right - left
-    height = bottom - top
-
-    # Capture the window
-    hdesktop = win32gui.GetDesktopWindow()
-    hwndDC = win32gui.GetWindowDC(hdesktop)
-    mfcDC = win32ui.CreateDCFromHandle(hwndDC)
-    saveDC = mfcDC.CreateCompatibleDC()
-
-    bitmap = win32ui.CreateBitmap()
-    bitmap.CreateCompatibleBitmap(mfcDC, width, height)
-    saveDC.SelectObject(bitmap)
-
-    saveDC.BitBlt((0, 0), (width, height), mfcDC, (left, top), win32con.SRCCOPY)
-    bitmap.SaveBitmapFile(saveDC, "game_screenshot.bmp")
-
-    # Convert to an image
-    img = Image.open("game_screenshot.bmp")
-    return cv2.cvtColor(np.array(img), cv2.COLOR_BGR2RGB)
+# def capture_window_2(window_name):
+#     # Find the window handle
+#     hwnd = win32gui.FindWindow(None, window_name)  # Replace with the game's window title
+#     if not hwnd:
+#         print("Window not found!")
+#         return None
+#
+#     # Get the window dimensions
+#     left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+#     width = right - left
+#     height = bottom - top
+#
+#     # Capture the window
+#     hdesktop = win32gui.GetDesktopWindow()
+#     hwndDC = win32gui.GetWindowDC(hdesktop)
+#     mfcDC = win32ui.CreateDCFromHandle(hwndDC)
+#     saveDC = mfcDC.CreateCompatibleDC()
+#
+#     bitmap = win32ui.CreateBitmap()
+#     bitmap.CreateCompatibleBitmap(mfcDC, width, height)
+#     saveDC.SelectObject(bitmap)
+#
+#     saveDC.BitBlt((0, 0), (width, height), mfcDC, (left, top), win32con.SRCCOPY)
+#     bitmap.SaveBitmapFile(saveDC, "game_screenshot.bmp")
+#
+#     # Convert to an image
+#     img = Image.open("game_screenshot.bmp")
+#     return cv2.cvtColor(np.array(img), cv2.COLOR_BGR2RGB)
 
 
 def find_best_scale(template, screenshot, scales, threshold=0.8):
@@ -266,3 +266,38 @@ def parse_game_state(detected_cards, screen_width, screen_height):
             column[i] = column[i][1]  # Extract card name only
 
     return game_state
+
+
+def visualize_game_state(tableau, foundation, waste, waste_pile):
+    """
+    Visualize the entire game state, including tableau, foundation, and waste piles.
+    :param tableau: A list of lists representing columns of cards in the tableau.
+    :param foundation: A dictionary representing the foundation piles (Hearts, Diamonds, Clubs, Spades).
+    :param waste: A list representing the waste pile.
+    """
+    print("\nGame State:")
+
+    # Print the tableau
+    print("Tableau:")
+    for i, column in enumerate(tableau, start=1):
+        if column:
+            formatted_column = [
+                "X" if idx < len(column) - 1 else card for idx, card in enumerate(column)
+            ]
+            print(f"  Column {i}: {' '.join(column)}")
+        else:
+            print(f"  Column {i}: Empty")
+
+    # Print the foundation
+    print("\nFoundation:")
+    for suit, cards in foundation.items():
+        print(f"  {suit}: {' '.join(cards) if cards else 'Empty'}")
+
+    # Print the waste
+    print(f"\nWaste: {' '.join(waste) if waste else 'Empty'}")
+
+    # Print the waste pile
+    print(f"Waste Pile: {' '.join(waste_pile) if waste_pile else 'Empty'}")
+
+    # Add a separator
+    print("-" * 40)
