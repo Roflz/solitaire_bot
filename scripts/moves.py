@@ -73,7 +73,7 @@ def evaluate_moves(game_state):
     for column_index, column in enumerate(game_state["columns"]):
         if column and not has_hidden_cards(column):
             top_card = column[0]
-            if can_move_to_column(top_card, game_state["columns"]):
+            if can_move_to_column(top_card, game_state["columns"]) and not is_king(top_card):
                 moves.append({
                     "priority": 5,
                     "action": "move_to_column",
@@ -144,6 +144,8 @@ def is_king(card):
 def get_column_to_move_to(card, columns):
     # Return the index of the best column to move the card to
     for column_index, column in enumerate(columns):
+        if not column and is_king(card):
+            return column_index
         if column and is_valid_column_move(card, column[-1]):
             return column_index
     return None
