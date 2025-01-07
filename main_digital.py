@@ -6,25 +6,12 @@ import cv2
 import numpy as np
 from PIL import Image
 from scripts import utils, moves, game_setup
+import faulthandler
 
-templates_dir = os.path.join("templates", "cards")
 
-# This one is for real time playing
-# screenshot = utils.capture_window_2("BlueStacks App Player")
-# screen_height, screen_width = screenshot.shape[:-1]
+faulthandler.enable()
 
-# This one is for debugging
-# screenshot = Image.open("game_screenshot_no_waste.bmp")
-# screen_height, screen_width = screenshot.size
-
-# This one is to run digitally
 start_state = game_setup.run_game_setup()
-
-# cards = utils.find_cards("game_screenshot_no_waste.bmp",
-#                          templates_dir,
-#                          threshold=0.95)
-# utils.draw_regions("game_screenshot_no_waste.bmp", screen_width, screen_height)
-# game_state = utils.parse_game_state(cards, screen_width, screen_height)
 
 columns = [X for X in start_state['tableau'].values()]
 columns_with_cards_hidden = [[*(['X'] * (len(sublist) - 1)), sublist[-1]] if sublist else [] for sublist in columns]
@@ -36,7 +23,25 @@ game_state = {
     'waste_pile': start_state['remaining_deck']
 }
 
-for i in range(20):
+perform_moves = []
+done = False
+reshuffles = 0
+moves_performed = 0
+moves_since_reshuffle = 0
+
+while not done:
+    perform_moves = moves.evaluate_moves(game_state)
+    for move in perform_moves:
+        print(move)
+        moves_performed += 1
+        moves_since_reshuffle += 1
+
+    # Shuffle waste pile if no moves and waste pile empty
+    if not perform_moves and not game_state['waste_pile']:
+        game_state['waste_pile'], game_state['waste'] = game_state['waste'], []
+        reshuffles += 1
+        moves_since_reshuffle = 0
+
     # Cycle Waste Cards if no moves or empty
     if not game_state['waste'] or not perform_moves:
         # Shuffle out 3 waste cards
@@ -47,12 +52,18 @@ for i in range(20):
     for j, column in enumerate(game_state['columns']):
         if column and column[-1] == 'X':  # Ensure the column is not empty
             column[-1] = columns[j][len(column) - 1]
-    utils.visualize_game_state(game_state['columns'], game_state['foundations'], game_state['waste'], game_state['waste_pile'])
 
-    perform_moves = moves.evaluate_moves(game_state)
-    for move in perform_moves:
-        print(move)
-
-    # Shuffle waste pile if no moves and waste pile empty
-    if not perform_moves and not game_state['waste_pile']:
-        game_state['waste_pile'], game_state['waste'] = game_state['waste'], []
+    # Visualize current game state
+    utils.visualize_game_state(game_state['columns'],
+                               game_state['foundations'],
+                               game_state['waste'],
+                               game_state['waste_pile'],
+                               moves_performed,
+                               reshuffles
+                               )
+    if (all(not sublist for sublist in game_state['columns'])\
+            and all(value == 'K' for value in game_state['foundations'].values())\
+            and not game_state['waste']\
+            and not game_state['waste_pile'])\
+            or (not moves_since_reshuffle and not game_state['waste_pile']):
+        done = True

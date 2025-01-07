@@ -268,7 +268,7 @@ def parse_game_state(detected_cards, screen_width, screen_height):
     return game_state
 
 
-def visualize_game_state(tableau, foundation, waste, waste_pile):
+def visualize_game_state(tableau, foundation, waste, waste_pile, moves_performed, reshuffles):
     """
     Visualize the entire game state, including tableau, foundation, and waste piles.
     :param tableau: A list of lists representing columns of cards in the tableau.
@@ -298,6 +298,12 @@ def visualize_game_state(tableau, foundation, waste, waste_pile):
 
     # Print the waste pile
     print(f"Waste Pile: {' '.join(waste_pile) if waste_pile else 'Empty'}")
+
+    # Print moves performed
+    print(f"Moves: {moves_performed}")
+
+    # Print reshuffles
+    print(f"Reshuffles: {reshuffles}")
 
     # Add a separator
     print("-" * 40)
