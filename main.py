@@ -11,13 +11,13 @@ from scripts import utils, moves
 # screen_height, screen_width = screenshot.shape[:-1]
 
 # This one is for debugging
-screenshot = Image.open("game_screenshot.bmp")
+screenshot = Image.open("game_screenshot_no_waste.bmp")
 screen_height, screen_width = screenshot.size
 
-cards = utils.find_cards("game_screenshot.bmp",
+cards = utils.find_cards("game_screenshot_no_waste.bmp",
                          "templates\\cards",
                          threshold=0.95)
-utils.draw_regions("game_screenshot.bmp", screen_width, screen_height)
+utils.draw_regions("game_screenshot_no_waste.bmp", screen_width, screen_height)
 game_state = utils.parse_game_state(cards, screen_width, screen_height)
 print(game_state)
 

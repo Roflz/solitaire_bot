@@ -231,7 +231,7 @@ def parse_game_state(detected_cards, screen_width, screen_height):
     screen_end_x = 1264
     column_width = (screen_end_x - screen_start_x) // num_columns
     game_state = {
-        "columns": [[] for _ in range(num_columns)],
+        "columns": [[(0, 'X')] * i for i in range(num_columns)],
         "foundations": {"H": [], "S": [], "D": [], "C": []},
         "waste": []
     }
@@ -247,8 +247,8 @@ def parse_game_state(detected_cards, screen_width, screen_height):
 
         # Check if the card is in the foundation region
         if foundation_region[0] <= x <= foundation_region[2] and foundation_region[1] <= y <= foundation_region[3]:
-            suit = card_name.split("_")[0]  # Extract suit
-            game_state["foundations"][suit].append(card_name)
+            suit = card_name[1]  # Extract suit
+            game_state["foundations"][suit] = card_name[0]  # Assign card value to foundation suit
 
         # Check if the card is in the waste region
         elif waste_region[0] <= x <= waste_region[2] and waste_region[1] <= y <= waste_region[3]:
