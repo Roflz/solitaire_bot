@@ -5,6 +5,8 @@ import pygetwindow as gw
 import cv2
 import numpy as np
 from PIL import Image
+
+import scripts.utils
 from scripts import utils, moves, game_setup
 import faulthandler
 
@@ -36,10 +38,7 @@ for game in range(0, number_of_games):
 
     while not done:
         perform_moves = moves.evaluate_moves(game_state)
-        for move in perform_moves:
-            print(move)
-            moves_performed += 1
-            moves_since_reshuffle += 1
+        scripts.utils.print_moves(perform_moves)
 
         # Shuffle waste pile if no moves and waste pile empty
         if not perform_moves and not game_state['waste_pile']:
