@@ -12,7 +12,7 @@ def evaluate_moves(game_state):
 
     # Move cards to foundations if possible
     for column_index, column in enumerate(game_state["columns"]):
-        if column:
+        if column:  # If column not empty
             top_card = column[-1]
             if is_playable_on_foundation(top_card, game_state["foundations"]):
                 moves.append({
@@ -21,6 +21,12 @@ def evaluate_moves(game_state):
                     "from_column": column_index,
                     "card": top_card
                 })
+                # Perform Move
+                # Fill this in with UI automated moves
+                # Update Game State
+                move_card_to_foundation_from_column(game_state, column_index, top_card)
+                # Retake screenshot and analyze upturned hidden card here
+
 
     # Play waste pile card if possible
     if game_state["waste"]:
@@ -32,6 +38,10 @@ def evaluate_moves(game_state):
                 "from_column": "waste",
                 "card": top_waste_card
             })
+            # Perform Move
+            # Fill this in with UI automated moves
+            # Update Game State
+            move_card_to_foundation_from_waste(game_state, top_waste_card)
         elif can_move_to_column(top_waste_card, game_state["columns"]):
             moves.append({
                 "priority": 3,
@@ -40,12 +50,16 @@ def evaluate_moves(game_state):
                 "to_column": get_column_to_move_to(top_waste_card, game_state["columns"]),
                 "card": top_waste_card
             })
+            # Perform Move
+            # Fill this in with UI automated moves
+            # Update Game State
+            move_card_to_column_from_waste(game_state, get_column_to_move_to(top_waste_card, game_state["columns"]))
 
     # Uncover hidden cards
     for column_index, column in enumerate(game_state["columns"]):
         if column and has_hidden_cards(column):
-            top_card = column[-1]
-            if can_move_to_another_column(top_card, game_state["columns"]):
+            top_card = get_card_after_x(column)
+            if can_move_to_column(top_card, game_state["columns"]):
                 moves.append({
                     "priority": 4,
                     "action": "move_to_column",
@@ -53,19 +67,21 @@ def evaluate_moves(game_state):
                     "to_column": get_column_to_move_to(top_card, game_state["columns"]),
                     "card": top_card
                 })
+                move_card_to_column_from_column(game_state, column_index, top_card)
 
     # Create empty columns
     for column_index, column in enumerate(game_state["columns"]):
-        if not column:  # Empty column
-            for other_column_index, other_column in enumerate(game_state["columns"]):
-                if other_column and is_king(other_column[-1]):
-                    moves.append({
-                        "priority": 5,
-                        "action": "move_to_column",
-                        "from_column": other_column_index,
-                        "to_column": column_index,
-                        "card": other_column[-1]
-                    })
+        if column and not has_hidden_cards(column):
+            top_card = column[0]
+            if can_move_to_column(top_card, game_state["columns"]) and not is_king(top_card):
+                moves.append({
+                    "priority": 5,
+                    "action": "move_to_column",
+                    "from_column": column_index,
+                    "to_column": get_column_to_move_to(top_card, game_state["columns"]),
+                    "card": top_card
+                })
+                move_card_to_column_from_column(game_state, column_index, top_card)
 
     # Sort moves by priority (lower numbers = higher priority)
     moves.sort(key=lambda move: move["priority"])
@@ -73,6 +89,35 @@ def evaluate_moves(game_state):
 
 
 # Helper functions
+def get_card_after_x(column):
+    last_index = len(column) - 1 - column[::-1].index('X')
+    if len(column) - 1 == last_index:
+        return 'X'
+    else:
+        return column[last_index + 1]
+
+
+def move_card_to_foundation_from_column(game_state, from_column, card):
+    suit = card[1]
+    game_state['foundations'][suit] = game_state['columns'][from_column].pop()[0]
+
+
+def move_card_to_foundation_from_waste(game_state, card):
+    suit = card[1]
+    game_state['foundations'][suit] = game_state['waste'].pop()[0]
+
+
+def move_card_to_column_from_waste(game_state, column_index):
+    game_state['columns'][column_index].append(game_state['waste'].pop())
+
+
+def move_card_to_column_from_column(game_state, column_index, top_card):
+    column = game_state['columns'][column_index]
+    target_column = get_column_to_move_to(top_card, game_state["columns"])
+    game_state['columns'][target_column].extend(column[column.index(top_card):])
+    game_state['columns'][column_index] = column[:column.index(top_card)]
+
+
 def is_playable_on_foundation(card, foundations):
     # Check if the card can be played on the foundations
     # Example: card = "2H", foundations = {"H": "AH", "D": "AD", "S": "AS", "C": "AC"}
@@ -85,17 +130,9 @@ def is_playable_on_foundation(card, foundations):
         return rank_order.index(rank) == rank_order.index(foundations[suit][0]) + 1
 
 
-def can_move_to_column(card, columns):
-    # Check if the card can be moved to any column
-    for column in columns:
-        if column and is_valid_column_move(card, column[-1]):
-            return True
-    return False
-
-
 def has_hidden_cards(column):
     # Check if there are hidden cards in the column
-    return len(column) > 1 and isinstance(column[-2], str)  # Example condition for hidden cards
+    return 'X' in column  # Example condition for hidden cards
 
 
 def is_king(card):
@@ -106,12 +143,14 @@ def is_king(card):
 def get_column_to_move_to(card, columns):
     # Return the index of the best column to move the card to
     for column_index, column in enumerate(columns):
+        if not column and is_king(card):
+            return column_index
         if column and is_valid_column_move(card, column[-1]):
             return column_index
     return None
 
 
-def can_move_to_another_column(card, columns):
+def can_move_to_column(card, columns):
     """
     Check if the given card can be moved to any column.
 
@@ -146,6 +185,8 @@ def is_valid_column_move(card, target_card):
     """
     card_rank, card_suit = card[:-1], card[-1]
     target_rank, target_suit = target_card[:-1], target_card[-1]
+    if not card_rank:
+        return False
 
     # Ensure opposite colors (red vs. black)
     red_suits = {"H", "D"}
