@@ -116,7 +116,6 @@ def move_card_to_column_from_column(game_state, column_index, top_card):
     target_column = get_column_to_move_to(top_card, game_state["columns"])
     game_state['columns'][target_column].extend(column[column.index(top_card):])
     game_state['columns'][column_index] = column[:column.index(top_card)]
-    # game_state['columns'][target_column].append(game_state['columns'][column].pop())
 
 
 def is_playable_on_foundation(card, foundations):
