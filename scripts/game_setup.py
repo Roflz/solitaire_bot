@@ -1,17 +1,20 @@
 import random
 
-# Initialize a standard deck of cards in the rank-suit format
+
+# Initialize a standard deck of ranks in the rank-suit format
 def create_deck():
     suits = ['H', 'D', 'C', 'S']  # Hearts, Diamonds, Clubs, Spades
     ranks = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A']
     return [f"{rank}{suit}" for suit in suits for rank in ranks]
+
 
 # Shuffle the deck
 def shuffle_deck(deck):
     random.shuffle(deck)
     return deck
 
-# Deal cards into the tableau
+
+# Deal ranks into the tableau
 def deal_tableau(deck):
     tableau = {}
     face_down_cards = {}
@@ -24,6 +27,7 @@ def deal_tableau(deck):
         del deck[:i]
 
     return tableau, face_down_cards, face_up_cards, deck
+
 
 # Initialize the game state
 def initialize_solitaire():
@@ -48,6 +52,7 @@ def initialize_solitaire():
     }
 
     return game_state
+
 
 # Print the game state
 def print_game_state(game_state):

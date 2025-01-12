@@ -6,8 +6,9 @@ import cv2
 import numpy as np
 from PIL import Image
 
+import scripts.evaluate_moves
 import scripts.utils
-from scripts import utils, moves, game_setup
+from scripts import utils, evaluate_moves, game_setup
 import faulthandler
 
 
@@ -38,7 +39,7 @@ for game in range(0, number_of_games):
 
     while not done:
         perform_moves = moves.evaluate_moves(game_state)
-        scripts.utils.print_moves(perform_moves)
+        scripts.moves.print_moves(perform_moves)
 
         # Shuffle waste pile if no moves and waste pile empty
         if not perform_moves and not game_state['waste_pile']:
@@ -48,11 +49,11 @@ for game in range(0, number_of_games):
 
         # Cycle Waste Cards if no moves or empty
         if not game_state['waste'] or not perform_moves:
-            # Shuffle out 3 waste cards
+            # Shuffle out 3 waste ranks
             game_state['waste'].extend(game_state['waste_pile'][-3:])  # Add last 3 items to 'waste'
             game_state['waste_pile'] = game_state['waste_pile'][:-3]   # Remove the last 3 items from 'waste_pile'
 
-        # turn upside down cards upright
+        # turn upside down ranks upright
         for j, column in enumerate(game_state['columns']):
             if column and column[-1] == 'X':  # Ensure the column is not empty
                 column[-1] = columns[j][len(column) - 1]
