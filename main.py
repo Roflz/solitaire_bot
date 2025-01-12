@@ -1,51 +1,27 @@
-import csv
 import os
-
-import pyautogui
-import pygetwindow as gw
-import cv2
-import numpy as np
-from PIL import Image
-
+import scripts.evaluate_moves
 import scripts.utils
-from scripts import utils, moves, game_setup
+from scripts import utils, evaluate_moves
+from PIL import Image
+from config import SCREEN_WIDTH, SCREEN_HEIGHT
 
-templates_dir = os.path.join("templates", "cards_higher_res")
+
+image_path = "game_screenshot.bmp"
+rank_threshold = 0.75
+suit_threshold = 0.9
 
 # This one is for real time playing
-# screenshot = utils.capture_window_2("BlueStacks App Player")
-# screen_height, screen_width = screenshot.shape[:-1]
+screenshot = utils.capture_window("BlueStacks App Player")
 
 # This one is for debugging
-with open('edge_testing.csv', mode="w", newline="") as csv_file:
-    csv_writer = csv.writer(csv_file)
-    csv_writer.writerow(["Threshold", "lower_threshold", "upper_threshold", "cards_found"])  # Header row
+# screenshot = Image.open("game_screenshot.bmp")
 
-    edge_lower_thresholds = [10 * i for i in range(1, 11)]
-    edge_upper_thresholds = [10 * i + 100 for i in range(1, 11)]
-    thresholds = [0.05 * i for i in range(1, 20)]
-    for i in thresholds:
-        for j in edge_upper_thresholds:
-            for k in edge_lower_thresholds:
-                screenshot = Image.open("game_screenshot_no_waste.bmp")
-                screen_height, screen_width = screenshot.size
+cards = utils.detect_suit_and_rank(image_path,
+                                   suit_threshold=suit_threshold,
+                                   rank_threshold=rank_threshold)
 
-                cards = utils.find_cards_edge_matching("game_screenshot_no_waste.bmp",
-                                                       templates_dir,
-                                                       threshold=i,
-                                                       edge_thresholds=(k, j))
-                print(f"Threshold: {i}")
-                print(f"Edge Upper Threshold: {j}")
-                print(f"Edge Lower Threshold: {k}")
-                print(f"Cards found: {len(cards)}")
-                csv_writer.writerow([i, k, j, len(cards)])
-# cards = utils.find_cards("game_screenshot.bmp",
-#                                        templates_dir,
-#                                        threshold=0.97)
-
-
-utils.draw_regions("game_screenshot_no_waste.bmp", screen_width, screen_height)
-game_state = utils.parse_start_state(cards, screen_width, screen_height)
+utils.draw_regions("game_screenshot.bmp")
+game_state = utils.parse_start_state(cards)
 
 # Visualize Game State in Console
 utils.visualize_game_state(game_state['columns'],
@@ -59,7 +35,7 @@ done = False
 while not done:
     # Perform Moves
     perform_moves = moves.evaluate_moves(game_state)
-    scripts.utils.print_moves(perform_moves)
+    scripts.moves.print_moves(perform_moves)
 
     # Shuffle waste pile if no moves and waste pile empty
     if not perform_moves and not game_state['waste_pile']:
@@ -67,23 +43,22 @@ while not done:
 
     # Cycle Waste Cards if no moves or empty
     if not game_state['waste'] or not perform_moves:
-        # Shuffle out 3 waste cards
+        # Shuffle out 3 waste ranks
         print('Cycle Waste Pile')
         game_state['waste'].extend(game_state['waste_pile'][-3:])
         game_state['waste_pile'] = game_state['waste_pile'][:-3]
 
     # Capture Screen
-    screenshot = utils.capture_window_2("BlueStacks App Player")
-    screen_height, screen_width = screenshot.shape[:-1]
+    screenshot = utils.capture_window("BlueStacks App Player")
 
     # Identify Cards
-    cards = utils.find_cards("game_screenshot.bmp",
-                             templates_dir,
-                             threshold=0.95)
-    utils.draw_regions("game_screenshot.bmp", screen_width, screen_height)
+    cards = utils.detect_suit_and_rank(image_path,
+                                       suit_threshold=suit_threshold,
+                                       rank_threshold=rank_threshold)
+    utils.draw_regions("game_screenshot.bmp")
 
     # Parse Game State
-    game_state = utils.parse_game_state(game_state, cards, screen_width, screen_height)
+    game_state = utils.parse_game_state(game_state, cards)
 
     # Visualize Game State in Console
     utils.visualize_game_state(game_state['columns'],

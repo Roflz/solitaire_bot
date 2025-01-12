@@ -5,9 +5,9 @@ import pygetwindow as gw
 import cv2
 import numpy as np
 from PIL import Image
-from scripts import utils, moves, game_setup
+from scripts import utils, evaluate_moves, game_setup
 
-templates_dir = os.path.join("templates", "cards")
+templates_dir = os.path.join("templates", "ranks")
 
 # This one is for debugging
 screenshot = Image.open("game_screenshot_no_waste.bmp")
