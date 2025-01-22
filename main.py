@@ -19,7 +19,6 @@ cards = utils.detect_suit_and_rank(image_path,
                                    suit_threshold=suit_threshold,
                                    rank_threshold=rank_threshold)
 
-utils.draw_regions("game_screenshot.bmp")
 game_state = utils.parse_start_state(cards)
 
 # Visualize Game State in Console
@@ -29,10 +28,26 @@ utils.visualize_game_state(game_state['columns'],
                            game_state['waste_pile']
                            )
 
+# Shuffle out 3 waste ranks to start
+shuffle_waste_pile()
+game_state['waste'].extend(game_state['waste_pile'][-3:])
+game_state['waste_pile'] = game_state['waste_pile'][:-3]
+
 done = False
 moves_this_shuffle = 0
 
 while not done:
+    # Capture Screen
+    screenshot = utils.capture_window("BlueStacks App Player")
+
+    # Identify Cards
+    cards = utils.detect_suit_and_rank(image_path,
+                                       suit_threshold=suit_threshold,
+                                       rank_threshold=rank_threshold)
+
+    # Parse Game State
+    game_state = utils.parse_game_state(game_state, cards)
+
     # Perform Moves
     perform_moves = evaluate_moves.evaluate_moves(game_state)
     moves_this_shuffle += len(perform_moves)
@@ -61,22 +76,3 @@ while not done:
         shuffle_waste_pile()
         game_state['waste'].extend(game_state['waste_pile'][-3:])
         game_state['waste_pile'] = game_state['waste_pile'][:-3]
-
-    # Capture Screen
-    screenshot = utils.capture_window("BlueStacks App Player")
-
-    # Identify Cards
-    cards = utils.detect_suit_and_rank(image_path,
-                                       suit_threshold=suit_threshold,
-                                       rank_threshold=rank_threshold)
-    # utils.draw_regions("game_screenshot.bmp")
-
-    # Parse Game State
-    game_state = utils.parse_game_state(game_state, cards)
-
-    # Visualize Game State in Console
-    # utils.visualize_game_state(game_state['columns'],
-    #                            game_state['foundations'],
-    #                            game_state['waste'],
-    #                            game_state['waste_pile']
-    #                            )
