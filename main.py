@@ -70,8 +70,8 @@ while not done:
     game_state = utils.parse_game_state(game_state, cards)
 
     # Visualize Game State in Console
-    # utils.visualize_game_state(game_state['columns'],
-    #                            game_state['foundations'],
-    #                            game_state['waste'],
-    #                            game_state['waste_pile']
-    #                            )
+    utils.visualize_game_state(game_state['columns'],
+                               game_state['foundations'],
+                               game_state['waste'],
+                               game_state['waste_pile']
+                               )
