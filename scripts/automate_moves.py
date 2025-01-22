@@ -1,3 +1,5 @@
+import math
+
 import pyautogui
 import time
 from config import CLICK_POINTS, HIDDEN_CARD_HEIGHT, VISIBLE_CARD_HEIGHT
@@ -45,7 +47,16 @@ def perform_move(move):
 
         if move['location'] == "waste":
             pyautogui.moveTo(CLICK_POINTS['waste'][0])
-            pyautogui.dragTo(dragto_position, duration=0.45, tween=easeInOutQuad)
+            # Calculate distance
+            distance = math.sqrt((dragto_x - CLICK_POINTS['waste'][0][0]) ** 2 + (dragto_y - CLICK_POINTS['waste'][0][1]) ** 2)
+            speed_factor = distance / 1100
+            if not speed_factor < 0.45:
+                speed_factor = 0.45
+            elif speed_factor < 0.22:
+                speed_factor = 0.22
+
+            pyautogui.dragTo(dragto_position, duration=speed_factor, tween=easeInOutQuad)
+            print(f"speed factor: {speed_factor}")
 
         elif "column" in move["location"]:
             moveto_x = CLICK_POINTS[move["location"]][0][0]
@@ -55,8 +66,18 @@ def perform_move(move):
 
             moveto_position = (moveto_x, moveto_y)
 
+            # Calculate distance
+            distance = math.sqrt((dragto_x - moveto_x) ** 2 + (dragto_y - moveto_y) ** 2)
+            speed_factor = distance / 1100
+            if not speed_factor < 0.45:
+                speed_factor = 0.45
+            elif speed_factor < 0.22:
+                speed_factor = 0.22
+
             pyautogui.moveTo(moveto_position)
-            pyautogui.dragTo(dragto_position, duration=0.45, tween=easeInOutQuad)
+            pyautogui.dragTo(dragto_position, duration=speed_factor, tween=easeInOutQuad)
+            print(f"speed factor: {speed_factor}")
+
         time.sleep(0.05)
 
 

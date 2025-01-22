@@ -103,7 +103,8 @@ def evaluate_moves(game_state):
             performed_moves.append(best_move)
             print_moves([performed_moves[-1]])
 
-            restart_outer_loop = True
+            if any(has_hidden_cards(column) for column in game_state["columns"]):
+                restart_outer_loop = True
             break  # Restart the outer loop
 
         if restart_outer_loop:
@@ -146,7 +147,8 @@ def evaluate_moves(game_state):
             performed_moves.append(best_move)
             print_moves([performed_moves[-1]])
 
-            restart_outer_loop = True
+            if any(has_hidden_cards(column) for column in game_state["columns"]):
+                restart_outer_loop = True
             break  # Restart the outer loop
 
         if restart_outer_loop:
@@ -189,7 +191,8 @@ def evaluate_moves(game_state):
             performed_moves.append(best_move)
             print_moves([performed_moves[-1]])
 
-            restart_outer_loop = True
+            if any(has_hidden_cards(column) for column in game_state["columns"]):
+                restart_outer_loop = True
             break  # Restart the outer loop
 
         if restart_outer_loop:
