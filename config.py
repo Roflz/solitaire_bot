@@ -18,6 +18,22 @@ COLUMN_4_REGION = (1000, 441, 1086, 1080)
 COLUMN_5_REGION = (1086, 441, 1172, 1080)
 COLUMN_6_REGION = (1172, 441, 1258, 1080)
 
+HIDDEN_CARD_HEIGHT = 16
+VISIBLE_CARD_HEIGHT = 30
+
+CLICK_POINTS = {
+        "waste_shuffle": [(3135, 272)],
+        # "waste": [(2978, 267), (3008, 265), (3038, 265)],
+        "waste": [(3008, 265)],
+        "column_0": [(2615, 450)],
+        "column_1": [(2703, 450)],
+        "column_2": [(2790, 450)],
+        "column_3": [(2877, 450)],
+        "column_4": [(2963, 450)],
+        "column_5": [(3050, 450)],
+        "column_6": [(3135, 450)]
+}
+
 REGIONS = {
         "waste": WASTE_REGION,
         "column_0": COLUMN_0_REGION,

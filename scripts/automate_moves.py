@@ -1,14 +1,7 @@
 import pyautogui
 import time
-
-# Example screen coordinates (adjust based on your game setup)
-X_OFFSET = 1920 # offset x for using the right screen
-STACK_BASE_X = 100  # Starting X-coordinate for the first stack
-STACK_BASE_Y = 500  # Y-coordinate for all stacks
-STACK_SPACING = 150  # Horizontal spacing between stacks
-FOUNDATION_BASE_X = 800  # Starting X-coordinate for the foundations
-FOUNDATION_BASE_Y = 100  # Y-coordinate for all foundations
-FOUNDATION_SPACING = 150  # Horizontal spacing between foundations
+from config import CLICK_POINTS, HIDDEN_CARD_HEIGHT, VISIBLE_CARD_HEIGHT
+from pyautogui import linear, easeInQuad, easeOutQuad, easeInOutQuad
 
 
 def perform_move(move):
@@ -21,53 +14,53 @@ def perform_move(move):
                      {"action": "move_card", "from_stack": 2, "to_stack": 4}
     """
     if move["action"] == "move_to_foundation":
-        stack_x, stack_y = get_stack_position(move["from_stack"])
-        foundation_x, foundation_y = get_foundation_position()
+        click_x = 0
+        click_y = 0
+
+        if move["location"] == 'waste':
+            click_x = CLICK_POINTS[move["location"]][0][0]
+            click_y = CLICK_POINTS[move["location"]][0][1]
+
+        elif 'column' in move["location"]:
+            click_x = CLICK_POINTS[move["location"]][0][0]
+
+            hidden_cards = move['column'].count('X')
+            visible_cards = len(move['column']) - move['column'].count('X')
+            click_y = CLICK_POINTS[move["location"]][0][1] + hidden_cards * HIDDEN_CARD_HEIGHT + visible_cards * VISIBLE_CARD_HEIGHT
+
+        click_position = (click_x, click_y)
 
         # Move card to foundation
-        pyautogui.leftClick()
+        pyautogui.click(click_position)
+        time.sleep(0.2)
 
-    elif move["action"] == "move_card":
-        from_x, from_y = get_stack_position(move["from_stack"])
-        to_x, to_y = get_stack_position(move["to_stack"])
+    elif move["action"] == "move_to_column":
+        dragto_x = CLICK_POINTS[move["to_column"]][0][0]
+        hidden_cards = move['to_column_list'].count('X')
+        visible_cards = len(move['to_column_list']) - move['to_column_list'].count('X')
+        dragto_y = CLICK_POINTS[move["to_column"]][0][
+                       1] + hidden_cards * HIDDEN_CARD_HEIGHT + visible_cards * VISIBLE_CARD_HEIGHT
 
-        # Drag card from one stack to another
-        pyautogui.moveTo(from_x, from_y, duration=0.2)
-        pyautogui.dragTo(to_x, to_y, duration=0.2)
+        dragto_position = (dragto_x, dragto_y)
 
-    elif move["action"] == "flip_card":
-        stack_x, stack_y = get_stack_position(move["stack"])
+        if move['location'] == "waste":
+            pyautogui.moveTo(CLICK_POINTS['waste'][0])
+            pyautogui.dragTo(dragto_position, duration=0.45, tween=easeInOutQuad)
 
-        # Simulate a click to flip the card
-        pyautogui.click(stack_x, stack_y)
+        elif "column" in move["location"]:
+            moveto_x = CLICK_POINTS[move["location"]][0][0]
+            hidden_cards_from_column = move['from_column_list'].count('X')
+            moveto_y = CLICK_POINTS[move["location"]][0][
+                           1] + hidden_cards_from_column * HIDDEN_CARD_HEIGHT
 
-    time.sleep(0.5)  # Add a delay between moves for stability
+            moveto_position = (moveto_x, moveto_y)
 
-
-def get_stack_position(stack_index, cards_in_stack):
-    """
-    Calculate the screen position of a stack based on its index.
-
-    Args:
-        stack_index (int): Index of the stack (0-based).
-
-    Returns:
-        (int, int): X, Y coordinates of the stack.
-    """
-    return STACK_BASE_X + stack_index * STACK_SPACING, STACK_BASE_Y
+            pyautogui.moveTo(moveto_position)
+            pyautogui.dragTo(dragto_position, duration=0.45, tween=easeInOutQuad)
+        time.sleep(0.1)
 
 
-def get_foundation_position(foundation_index=0):
-    """
-    Calculate the screen position of a foundation based on its index.
-
-    Args:
-        foundation_index (int): Index of the foundation (0-based).
-
-    Returns:
-        (int, int): X, Y coordinates of the foundation.
-    """
-    return FOUNDATION_BASE_X + foundation_index * FOUNDATION_SPACING, FOUNDATION_BASE_Y
-
-
-perform_move()
+def shuffle_waste_pile():
+    click_position = CLICK_POINTS["waste_shuffle"][0]
+    pyautogui.click(click_position)
+    time.sleep(0.4)

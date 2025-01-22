@@ -1,5 +1,7 @@
 from colorama import Fore, Style
 
+from scripts import automate_moves, utils
+
 
 def evaluate_moves(game_state):
     """
@@ -25,10 +27,74 @@ def evaluate_moves(game_state):
                     "card": top_card
                 })
                 # Perform Move
-                # Fill this in with UI automated moves
+                move = {
+                    'action': "move_to_foundation",
+                    'location': f"column_{column_index}",
+                    'position': len(column) - 1,
+                    'column': column
+                }
+                automate_moves.perform_move(move)
+
                 # Update Game State
                 move_card_to_foundation_from_column(game_state, column_index, top_card)
+
                 # Retake screenshot and analyze upturned hidden card here
+
+
+    # Uncover hidden ranks
+    for column_index, column in enumerate(game_state["columns"]):
+        if column and has_hidden_cards(column):
+            top_card = get_card_after_x(column)
+            if can_move_to_column(top_card, game_state["columns"]):
+                to_column = get_column_to_move_to(top_card, game_state["columns"])
+                moves.append({
+                    "priority": 4,
+                    "action": "move_to_column",
+                    "from_column": column_index,
+                    "to_column": to_column,
+                    "card": top_card
+                })
+                # Perform Move
+                move = {
+                    'action': "move_to_column",
+                    'location': f"column_{column_index}",
+                    'position_1': column.index(top_card),
+                    'from_column_list': column,
+                    'to_column': f"column_{to_column}",
+                    'position_2': len(game_state['columns'][to_column]),
+                    'to_column_list': game_state['columns'][to_column]
+                }
+                automate_moves.perform_move(move)
+                # Update Game State
+                move_card_to_column_from_column(game_state, column_index, top_card)
+                # Detect upturned card
+
+    # Create empty columns
+    for column_index, column in enumerate(game_state["columns"]):
+        if column and not has_hidden_cards(column):
+            top_card = column[0]
+            if can_move_to_column(top_card, game_state["columns"]) and not is_king(top_card):
+                to_column = get_column_to_move_to(top_card, game_state["columns"])
+                moves.append({
+                    "priority": 5,
+                    "action": "move_to_column",
+                    "from_column": column_index,
+                    "to_column": to_column,
+                    "card": top_card
+                })
+                # Perform Move
+                move = {
+                    'action': "move_to_column",
+                    'location': f"column_{column_index}",
+                    'position_1': column.index(top_card),
+                    'from_column_list': column,
+                    'to_column': f"column_{to_column}",
+                    'position_2': len(game_state['columns'][to_column]),
+                    'to_column_list': game_state['columns'][to_column]
+                }
+                automate_moves.perform_move(move)
+                # Update Game State
+                move_card_to_column_from_column(game_state, column_index, top_card)
 
     # Play waste pile card if possible
     if game_state["waste"]:
@@ -41,52 +107,37 @@ def evaluate_moves(game_state):
                 "card": top_waste_card
             })
             # Perform Move
-            # Fill this in with UI automated moves
+            move = {
+                'action': "move_to_foundation",
+                'location': "waste",
+                'position': 0,
+                'column': []
+            }
+            automate_moves.perform_move(move)
             # Update Game State
             move_card_to_foundation_from_waste(game_state, top_waste_card)
 
         elif can_move_to_column(top_waste_card, game_state["columns"]):
+            to_column = get_column_to_move_to(top_waste_card, game_state["columns"])
             moves.append({
                 "priority": 3,
                 "action": "move_to_column",
                 "from_column": "waste",
-                "to_column": get_column_to_move_to(top_waste_card, game_state["columns"]),
+                "to_column": to_column,
                 "card": top_waste_card
             })
             # Perform Move
-            # Fill this in with UI automated moves
+
+            move = {
+                'action': "move_to_column",
+                'location': "waste",
+                'to_column': f"column_{to_column}",
+                'position': len(game_state['columns'][to_column]),
+                'to_column_list': game_state['columns'][to_column]
+            }
+            automate_moves.perform_move(move)
             # Update Game State
-            move_card_to_column_from_waste(game_state, get_column_to_move_to(top_waste_card, game_state["columns"]))
-
-    # Uncover hidden ranks
-    for column_index, column in enumerate(game_state["columns"]):
-        if column and has_hidden_cards(column):
-            top_card = get_card_after_x(column)
-            if can_move_to_column(top_card, game_state["columns"]):
-                moves.append({
-                    "priority": 4,
-                    "action": "move_to_column",
-                    "from_column": column_index,
-                    "to_column": get_column_to_move_to(top_card, game_state["columns"]),
-                    "card": top_card
-                })
-                # Update Game State
-                move_card_to_column_from_column(game_state, column_index, top_card)
-                # Detect upturned card
-
-    # Create empty columns
-    for column_index, column in enumerate(game_state["columns"]):
-        if column and not has_hidden_cards(column):
-            top_card = column[0]
-            if can_move_to_column(top_card, game_state["columns"]) and not is_king(top_card):
-                moves.append({
-                    "priority": 5,
-                    "action": "move_to_column",
-                    "from_column": column_index,
-                    "to_column": get_column_to_move_to(top_card, game_state["columns"]),
-                    "card": top_card
-                })
-                move_card_to_column_from_column(game_state, column_index, top_card)
+            move_card_to_column_from_waste(game_state, to_column)
 
     # Sort moves by priority (lower numbers = higher priority)
     moves.sort(key=lambda move: move["priority"])
@@ -132,7 +183,8 @@ def is_playable_on_foundation(card, foundations):
     if not foundations[suit]:
         return rank_order.index(rank) == 0
     else:
-        return rank_order.index(rank) == rank_order.index(foundations[suit][0]) + 1
+        top_card = foundations[suit][0]
+        return rank_order.index(rank) == rank_order.index(top_card) + 1
 
 
 def has_hidden_cards(column):
@@ -225,5 +277,5 @@ def print_moves(moves):
             from_column = f'"{from_column}"'  # Add quotes for display clarity
 
         # Display the move
-        print(Fore.RED + f"{move['card']}" + Fore.GREEN + f"from Column" + Fore.RED + f" {from_column}, " + Fore.YELLOW
+        print(Fore.RED + f"{move['card']} " + Fore.GREEN + f"from Column" + Fore.RED + f" {from_column}, " + Fore.YELLOW
               + f"{move['action']}" + Fore.RED + f" {to_column}" + Style.RESET_ALL)
