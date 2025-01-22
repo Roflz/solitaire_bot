@@ -38,6 +38,12 @@ while not done:
     moves_this_shuffle += len(perform_moves)
     # evaluate_moves.print_moves(perform_moves)
 
+    # stop when all cards are out of waste and no hidden cards
+    if not game_state['waste_pile'] and not game_state['waste'] and not evaluate_moves.game_state_has_hidden_cards(game_state):
+        done = True
+        print("No more moves, finished game.")
+        break
+
     # Shuffle waste pile if no moves and waste pile empty
     if not perform_moves and not game_state['waste_pile']:
         if moves_this_shuffle == 0:
