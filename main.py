@@ -1,7 +1,7 @@
 import os
-import scripts.evaluate_moves
-import scripts.utils
 from scripts import utils, evaluate_moves
+from scripts.evaluate_moves import evaluate_moves, print_moves
+from scripts.automate_moves import shuffle_waste_pile
 from PIL import Image
 from config import SCREEN_WIDTH, SCREEN_HEIGHT
 
@@ -31,20 +31,29 @@ utils.visualize_game_state(game_state['columns'],
                            )
 
 done = False
+moves_this_shuffle = 0
 
 while not done:
     # Perform Moves
-    perform_moves = moves.evaluate_moves(game_state)
-    scripts.moves.print_moves(perform_moves)
+    perform_moves = evaluate_moves(game_state)
+    moves_this_shuffle += len(perform_moves)
+    print_moves(perform_moves)
 
     # Shuffle waste pile if no moves and waste pile empty
     if not perform_moves and not game_state['waste_pile']:
-        print('Shuffle Waste Pile')
+        if moves_this_shuffle == 0:
+            done = True
+            print("No more moves, finished game.")
+            break
+        moves_this_shuffle = 0
+        shuffle_waste_pile()
+        game_state['waste_pile'] = game_state['waste'][::-1]
+        game_state['waste'] = []
 
     # Cycle Waste Cards if no moves or empty
     if not game_state['waste'] or not perform_moves:
         # Shuffle out 3 waste ranks
-        print('Cycle Waste Pile')
+        shuffle_waste_pile()
         game_state['waste'].extend(game_state['waste_pile'][-3:])
         game_state['waste_pile'] = game_state['waste_pile'][:-3]
 
@@ -55,14 +64,14 @@ while not done:
     cards = utils.detect_suit_and_rank(image_path,
                                        suit_threshold=suit_threshold,
                                        rank_threshold=rank_threshold)
-    utils.draw_regions("game_screenshot.bmp")
+    # utils.draw_regions("game_screenshot.bmp")
 
     # Parse Game State
     game_state = utils.parse_game_state(game_state, cards)
 
     # Visualize Game State in Console
-    utils.visualize_game_state(game_state['columns'],
-                               game_state['foundations'],
-                               game_state['waste'],
-                               game_state['waste_pile']
-                               )
+    # utils.visualize_game_state(game_state['columns'],
+    #                            game_state['foundations'],
+    #                            game_state['waste'],
+    #                            game_state['waste_pile']
+    #                            )
