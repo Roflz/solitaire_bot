@@ -4,133 +4,201 @@ from scripts import automate_moves, utils
 
 
 def evaluate_moves(game_state):
-    """
-    Evaluate possible moves based on the game state.
+    performed_moves = []
 
-    Args:
-        game_state (dict): The current game state.
+    while True:  # Outer loop to restart the evaluation process
+        restart_outer_loop = False  # Flag to control restarting the outer loop
 
-    Returns:
-        list: A list of possible moves sorted by priority.
-    """
-    moves = []
-    cards = []
+        # Check if there are hidden cards left in the tableau
+        hidden_cards_exist = any(has_hidden_cards(column) for column in game_state["columns"])
 
-    # Move ranks to foundations if possible
-    while True:  # Outer loop to restart the `for` loop
-        for column_index, column in enumerate(game_state["columns"]):
-            if column:  # If column not empty
-                top_card = column[-1]
-                if is_playable_on_foundation(top_card, game_state["foundations"]):
-                    moves.append({
-                        "priority": 1,  # High priority
+        # If no hidden cards exist, prioritize waste pile moves
+        if not hidden_cards_exist:
+            if game_state["waste"]:
+                top_waste_card = game_state["waste"][-1]
+                if is_playable_on_foundation(top_waste_card, game_state["foundations"]):
+                    performed_moves.append({
+                        "priority": 2,
                         "action": "move_to_foundation",
-                        "from_column": column_index,
-                        "card": top_card
+                        "from_column": "waste",
+                        "card": top_waste_card
                     })
                     # Perform Move
                     move = {
                         'action': "move_to_foundation",
-                        'location': f"column_{column_index}",
-                        'position': len(column) - 1,
-                        'column': column
+                        'location': "waste",
+                        'position': 0,
+                        'column': []
                     }
                     automate_moves.perform_move(move)
 
                     # Update Game State
-                    move_card_to_foundation_from_column(game_state, column_index, top_card)
-
-                    # Retake screenshot and analyze upturned hidden card here
+                    move_card_to_foundation_from_waste(game_state, top_waste_card)
                     utils.capture_window("BlueStacks App Player")
                     cards = utils.detect_suit_and_rank("C:\_\solitaire_bot\game_screenshot.bmp")
-
-                    # Parse Game State
                     game_state = utils.parse_game_state(game_state, cards)
+                    print_moves([performed_moves[-1]])
 
-                    # Restart the loop from the beginning of enumerate
-                    break  # Exit the `for` loop to restart it
+                    continue  # Restart the outer loop
 
-    # Uncover hidden ranks
-        for column_index, column in enumerate(game_state["columns"]):
-            if column and has_hidden_cards(column):
-                top_card = get_card_after_x(column)
-                if can_move_to_column(top_card, game_state["columns"]):
-                    to_column = get_column_to_move_to(top_card, game_state["columns"])
-                    moves.append({
-                        "priority": 4,
+                elif can_move_to_column(top_waste_card, game_state["columns"]):
+                    to_column = get_column_to_move_to(top_waste_card, game_state["columns"])
+                    performed_moves.append({
+                        "priority": 3,
                         "action": "move_to_column",
-                        "from_column": column_index,
+                        "from_column": "waste",
                         "to_column": to_column,
-                        "card": top_card
+                        "card": top_waste_card
                     })
                     # Perform Move
                     move = {
                         'action': "move_to_column",
-                        'location': f"column_{column_index}",
-                        'position_1': column.index(top_card),
-                        'from_column_list': column,
+                        'location': "waste",
                         'to_column': f"column_{to_column}",
-                        'position_2': len(game_state['columns'][to_column]),
+                        'position': len(game_state['columns'][to_column]),
                         'to_column_list': game_state['columns'][to_column]
                     }
                     automate_moves.perform_move(move)
+
                     # Update Game State
-                    move_card_to_column_from_column(game_state, column_index, top_card)
-                    # Detect upturned card
+                    move_card_to_column_from_waste(game_state, to_column)
                     utils.capture_window("BlueStacks App Player")
                     cards = utils.detect_suit_and_rank("C:\_\solitaire_bot\game_screenshot.bmp")
-
-                    # Parse Game State
                     game_state = utils.parse_game_state(game_state, cards)
+                    print_moves([performed_moves[-1]])
 
-                    # Restart the loop from the beginning of enumerate
-                    break  # Exit the `for` loop to restart it
+                    continue  # Restart the outer loop
 
-    # Create empty columns
-        for column_index, column in enumerate(game_state["columns"]):
-            if column and not has_hidden_cards(column):
-                top_card = column[0]
-                if can_move_to_column(top_card, game_state["columns"]) and not is_king(top_card):
-                    to_column = get_column_to_move_to(top_card, game_state["columns"])
-                    moves.append({
-                        "priority": 5,
-                        "action": "move_to_column",
-                        "from_column": column_index,
-                        "to_column": to_column,
-                        "card": top_card
-                    })
-                    # Perform Move
-                    move = {
-                        'action': "move_to_column",
-                        'location': f"column_{column_index}",
-                        'position_1': column.index(top_card),
-                        'from_column_list': column,
-                        'to_column': f"column_{to_column}",
-                        'position_2': len(game_state['columns'][to_column]),
-                        'to_column_list': game_state['columns'][to_column]
-                    }
-                    automate_moves.perform_move(move)
-                    # Update Game State
-                    move_card_to_column_from_column(game_state, column_index, top_card)
-                    # Detect upturned card
-                    utils.capture_window("BlueStacks App Player")
-                    cards = utils.detect_suit_and_rank("C:\_\solitaire_bot\game_screenshot.bmp")
+        # Move ranks to foundations if possible
+        while True:
+            moves = []
+            for column_index, column in enumerate(game_state["columns"]):
+                if column:
+                    top_card = column[-1]
+                    if is_playable_on_foundation(top_card, game_state["foundations"]):
+                        moves.append({
+                            "priority": column.count('X'),
+                            "action": "move_to_foundation",
+                            "from_column": column_index,
+                            "card": top_card
+                        })
 
-                    # Parse Game State
-                    game_state = utils.parse_game_state(game_state, cards)
+            if not moves:
+                break
 
-                    # Restart the loop from the beginning of enumerate
-                    break  # Exit the `for` loop to restart it
+            best_move = max(moves, key=lambda move: move["priority"])
+            move = {
+                'action': best_move["action"],
+                'location': f"column_{best_move['from_column']}",
+                'position': len(game_state["columns"][best_move['from_column']]) - 1,
+                'column': game_state["columns"][best_move['from_column']]
+            }
+            automate_moves.perform_move(move)
 
-        # else:
-        #     # If the `for` loop completes without a `break`, exit the `while` loop
-        #     break
+            # Update Game State
+            move_card_to_foundation_from_column(game_state, best_move["from_column"], best_move["card"])
+            utils.capture_window("BlueStacks App Player")
+            cards = utils.detect_suit_and_rank("C:\_\solitaire_bot\game_screenshot.bmp")
+            game_state = utils.parse_game_state(game_state, cards)
+            performed_moves.append(best_move)
+            print_moves([performed_moves[-1]])
 
-    # Play waste pile card if possible
+            restart_outer_loop = True
+            break  # Restart the outer loop
+
+        if restart_outer_loop:
+            continue  # Restart the outer loop from the beginning
+
+        # Uncover hidden ranks
+        while True:
+            moves = []
+            for column_index, column in enumerate(game_state["columns"]):
+                if column and has_hidden_cards(column):
+                    top_card = get_card_after_x(column)
+                    if can_move_to_column(top_card, game_state["columns"]):
+                        to_column = get_column_to_move_to(top_card, game_state["columns"])
+                        moves.append({
+                            "priority": column.count('X'),
+                            "action": "move_to_column",
+                            "from_column": column_index,
+                            "to_column": to_column,
+                            "card": top_card
+                        })
+
+            if not moves:
+                break
+
+            best_move = max(moves, key=lambda move: move["priority"])
+            move = {
+                'action': best_move["action"],
+                'location': f"column_{best_move['from_column']}",
+                'position_1': game_state["columns"][best_move['from_column']].index(best_move["card"]),
+                'from_column_list': game_state["columns"][best_move['from_column']],
+                'to_column': f"column_{best_move['to_column']}",
+                'position_2': len(game_state["columns"][best_move['to_column']]),
+                'to_column_list': game_state["columns"][best_move['to_column']]
+            }
+            automate_moves.perform_move(move)
+            move_card_to_column_from_column(game_state, best_move["from_column"], best_move["card"])
+            utils.capture_window("BlueStacks App Player")
+            cards = utils.detect_suit_and_rank("C:\_\solitaire_bot\game_screenshot.bmp")
+            game_state = utils.parse_game_state(game_state, cards)
+            performed_moves.append(best_move)
+            print_moves([performed_moves[-1]])
+
+            restart_outer_loop = True
+            break  # Restart the outer loop
+
+        if restart_outer_loop:
+            continue  # Restart the outer loop from the beginning
+
+        # Create empty columns
+        while True:
+            moves = []
+            for column_index, column in enumerate(game_state["columns"]):
+                if column and not has_hidden_cards(column):
+                    top_card = column[0]
+                    if can_move_to_column(top_card, game_state["columns"]) and not is_king(top_card):
+                        to_column = get_column_to_move_to(top_card, game_state["columns"])
+                        moves.append({
+                            "priority": column.count('X'),
+                            "action": "move_to_column",
+                            "from_column": column_index,
+                            "to_column": to_column,
+                            "card": top_card
+                        })
+
+            if not moves:
+                break
+
+            best_move = max(moves, key=lambda move: move["priority"])
+            move = {
+                'action': best_move["action"],
+                'location': f"column_{best_move['from_column']}",
+                'position_1': game_state["columns"][best_move['from_column']].index(best_move["card"]),
+                'from_column_list': game_state["columns"][best_move['from_column']],
+                'to_column': f"column_{best_move['to_column']}",
+                'position_2': len(game_state["columns"][best_move['to_column']]),
+                'to_column_list': game_state["columns"][best_move['to_column']]
+            }
+            automate_moves.perform_move(move)
+            move_card_to_column_from_column(game_state, best_move["from_column"], best_move["card"])
+            utils.capture_window("BlueStacks App Player")
+            cards = utils.detect_suit_and_rank("C:\_\solitaire_bot\game_screenshot.bmp")
+            game_state = utils.parse_game_state(game_state, cards)
+            performed_moves.append(best_move)
+            print_moves([performed_moves[-1]])
+
+            restart_outer_loop = True
+            break  # Restart the outer loop
+
+        if restart_outer_loop:
+            continue  # Restart the outer loop from the beginning
+
         if game_state["waste"]:
             top_waste_card = game_state["waste"][-1]
             if is_playable_on_foundation(top_waste_card, game_state["foundations"]):
-                moves.append({
+                performed_moves.append({
                     "priority": 2,
                     "action": "move_to_foundation",
                     "from_column": "waste",
@@ -144,21 +212,19 @@ def evaluate_moves(game_state):
                     'column': []
                 }
                 automate_moves.perform_move(move)
+
                 # Update Game State
                 move_card_to_foundation_from_waste(game_state, top_waste_card)
-                # Detect upturned card
                 utils.capture_window("BlueStacks App Player")
                 cards = utils.detect_suit_and_rank("C:\_\solitaire_bot\game_screenshot.bmp")
-
-                # Parse Game State
                 game_state = utils.parse_game_state(game_state, cards)
+                print_moves([performed_moves[-1]])
 
-                # Restart the loop from the beginning if we hit this point
-                continue  # Exit the `if` block to restart the loop
+                continue  # Restart the outer loop
 
             elif can_move_to_column(top_waste_card, game_state["columns"]):
                 to_column = get_column_to_move_to(top_waste_card, game_state["columns"])
-                moves.append({
+                performed_moves.append({
                     "priority": 3,
                     "action": "move_to_column",
                     "from_column": "waste",
@@ -174,22 +240,19 @@ def evaluate_moves(game_state):
                     'to_column_list': game_state['columns'][to_column]
                 }
                 automate_moves.perform_move(move)
+
                 # Update Game State
                 move_card_to_column_from_waste(game_state, to_column)
-                # Detect upturned card
                 utils.capture_window("BlueStacks App Player")
                 cards = utils.detect_suit_and_rank("C:\_\solitaire_bot\game_screenshot.bmp")
-
-                # Parse Game State
                 game_state = utils.parse_game_state(game_state, cards)
+                print_moves([performed_moves[-1]])
 
-                # Restart the loop from the beginning if we hit this point
-                continue  # Exit the `if` block to restart the loop
-        break
+                continue  # Restart the outer loop
 
-    # Sort moves by priority (lower numbers = higher priority)
-    moves.sort(key=lambda move: move["priority"])
-    return moves
+        break  # Exit the outer loop if no more moves are available
+
+    return performed_moves
 
 
 # Helper functions
@@ -238,6 +301,13 @@ def is_playable_on_foundation(card, foundations):
 def has_hidden_cards(column):
     # Check if there are hidden ranks in the column
     return 'X' in column  # Example condition for hidden ranks
+
+
+def game_state_has_hidden_cards(game_state):
+    for column in game_state['columns']:
+        if has_hidden_cards(column):
+            return True
+    return False
 
 
 def is_king(card):

@@ -32,7 +32,7 @@ def perform_move(move):
 
         # Move card to foundation
         pyautogui.click(click_position)
-        time.sleep(0.1)
+        time.sleep(0.25)
 
     elif move["action"] == "move_to_column":
         dragto_x = CLICK_POINTS[move["to_column"]][0][0]

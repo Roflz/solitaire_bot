@@ -1,6 +1,5 @@
 import os
 from scripts import utils, evaluate_moves
-from scripts.evaluate_moves import evaluate_moves, print_moves
 from scripts.automate_moves import shuffle_waste_pile
 from PIL import Image
 from config import SCREEN_WIDTH, SCREEN_HEIGHT
@@ -35,9 +34,9 @@ moves_this_shuffle = 0
 
 while not done:
     # Perform Moves
-    perform_moves = evaluate_moves(game_state)
+    perform_moves = evaluate_moves.evaluate_moves(game_state)
     moves_this_shuffle += len(perform_moves)
-    print_moves(perform_moves)
+    # evaluate_moves.print_moves(perform_moves)
 
     # Shuffle waste pile if no moves and waste pile empty
     if not perform_moves and not game_state['waste_pile']:
@@ -70,8 +69,8 @@ while not done:
     game_state = utils.parse_game_state(game_state, cards)
 
     # Visualize Game State in Console
-    utils.visualize_game_state(game_state['columns'],
-                               game_state['foundations'],
-                               game_state['waste'],
-                               game_state['waste_pile']
-                               )
+    # utils.visualize_game_state(game_state['columns'],
+    #                            game_state['foundations'],
+    #                            game_state['waste'],
+    #                            game_state['waste_pile']
+    #                            )
