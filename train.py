@@ -15,15 +15,16 @@ def train(total_steps=10000000, num_envs=32, checkpoint_dir="checkpoints"):
     os.makedirs(checkpoint_dir, exist_ok=True)
     env = SyncVectorEnv([make_env for _ in range(num_envs)])
     agent = DQNAgent(env.single_observation_space.shape[0], env.single_action_space.n)
-    state = env.reset()
+    state, _ = env.reset()
     wins = np.zeros(num_envs, dtype=int)
 
     for step in range(1, total_steps + 1):
         actions = [agent.select_action(s) for s in state]
-        next_state, rewards, dones, _ = env.step(actions)
+        next_state, rewards, dones, truncs, _ = env.step(actions)
+        done_flags = np.logical_or(dones, truncs)
         for i in range(num_envs):
-            agent.store_transition(state[i], actions[i], rewards[i], next_state[i], dones[i])
-            if dones[i] and rewards[i] > 0:
+            agent.store_transition(state[i], actions[i], rewards[i], next_state[i], done_flags[i])
+            if done_flags[i] and rewards[i] > 0:
                 wins[i] += 1
         agent.update()
         agent.step()

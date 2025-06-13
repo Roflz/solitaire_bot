@@ -4,8 +4,10 @@ This project simulates Klondike Solitaire entirely in memory and can train a Dee
 
 ## Installation
 
+Install dependencies using the provided requirements file:
+
 ```bash
-pip install gym numpy torch
+pip install -r requirements.txt
 ```
 
 ## Training
