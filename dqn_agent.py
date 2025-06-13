@@ -62,6 +62,7 @@ class DQNAgent:
         self.total_steps = 0
         self.target_sync = 1000
         self.action_dim = action_dim
+        self.update_epsilon()
 
     def select_action(self, state, eval=False):
         if (not eval) and random.random() < self.epsilon:
@@ -99,7 +100,10 @@ class DQNAgent:
 
         return loss.item()
 
+    def update_epsilon(self):
+        decay_ratio = min(1.0, self.total_steps / self.epsilon_decay_steps)
+        self.epsilon = self.epsilon_start - (self.epsilon_start - self.epsilon_end) * decay_ratio
+
     def step(self):
         self.total_steps += 1
-        decay_rate = max(0, (self.epsilon_decay_steps - self.total_steps) / self.epsilon_decay_steps)
-        self.epsilon = self.epsilon_end + (self.epsilon_start - self.epsilon_end) * decay_rate
+        self.update_epsilon()

@@ -46,22 +46,42 @@ def train(total_steps=10000000, num_envs=32, checkpoint_dir="checkpoints"):
     steps = []
 
     sample_env = KlondikeEnv()
-    agent = DQNAgent(sample_env.observation_space.shape[0], sample_env.action_space.n)
+    agent = DQNAgent(
+        sample_env.observation_space.shape[0],
+        sample_env.action_space.n,
+        epsilon_decay_steps=total_steps,
+    )
+
+    ckpts = [f for f in os.listdir(checkpoint_dir) if f.startswith("dqn_") and f.endswith(".pth")]
+    start_step = 0
+    if ckpts:
+        ckpts.sort(key=lambda x: int(x.split("_")[1].split(".")[0]))
+        last_ckpt = ckpts[-1]
+        start_step = int(last_ckpt.split("_")[1].split(".")[0])
+        path = os.path.join(checkpoint_dir, last_ckpt)
+        agent.q_net.load_state_dict(torch.load(path))
+        agent.target_net.load_state_dict(agent.q_net.state_dict())
+        agent.total_steps = start_step
+        agent.update_epsilon()
+        print(f"Loaded checkpoint '{path}' (starting from step {start_step})")
+
     print(
         f"Starting training: total_steps={total_steps}, num_envs={num_envs}, device={agent.device}"
     )
+    print("TensorBoard logging to runs/solitaire - run 'tensorboard --logdir runs/solitaire' to view")
     start_time = time.time()
     env = SyncVectorEnv([make_env for _ in range(num_envs)])
     state, _ = env.reset()
     wins = np.zeros(num_envs, dtype=int)
     recent_win_rate = 0
+    recent_reward = 0.0
+    avg_r_last = 0.0
 
     for step in trange(
-        1,
+        start_step + 1,
         total_steps + 1,
         desc="Training",
         unit="step",
-        mininterval=5,
         leave=True,
     ):
         actions = [agent.select_action(s) for s in state]
@@ -71,25 +91,30 @@ def train(total_steps=10000000, num_envs=32, checkpoint_dir="checkpoints"):
             agent.store_transition(state[i], actions[i], rewards[i], next_state[i], done_flags[i])
             if done_flags[i] and rewards[i] > 0:
                 wins[i] += 1
+        recent_reward += rewards.mean()
         loss = agent.update()
         agent.step()
         state = next_state
 
         if step % log_interval == 0 and loss is not None:
             recent_win_rate = wins.sum() / num_envs
+            avg_r_last = recent_reward / log_interval
             print(
-                f"[Step {step}] loss={loss:.4f}, ε={agent.epsilon:.2f}, win_rate={recent_win_rate:.3f}"
+                f"[Step {step}] loss={loss:.4f}  ε={agent.epsilon:.3f}  win_rate={recent_win_rate:.3f}  avg_reward={avg_r_last:.3f}"
             )
             wins[:] = 0
+            recent_reward = 0.0
 
         if step % tb_interval == 0 and loss is not None:
             writer.add_scalar("train/loss", loss, step)
             writer.add_scalar("train/ε", agent.epsilon, step)
             writer.add_scalar("train/win_rate", recent_win_rate, step)
+            writer.add_scalar("train/avg_reward", avg_r_last, step)
 
         if step % eval_interval == 0:
             old_eps = agent.epsilon
             agent.epsilon = 0.0
+            print(f"Running evaluation at step {step}...")
             eval_win_rate = run_evaluation(agent, num_eval_games)
             writer.add_scalar("eval/win_rate", eval_win_rate, step)
             print(f">>> Eval @ {step}: win_rate={eval_win_rate:.3f}")
@@ -108,7 +133,9 @@ def train(total_steps=10000000, num_envs=32, checkpoint_dir="checkpoints"):
             plt.xlabel("Steps")
             plt.ylabel("Win Rate")
             plt.legend()
-            plt.savefig(os.path.join(plots_dir, f"win_rate_{step}.png"))
+            plot_path = os.path.join(plots_dir, f"win_rate_{step}.png")
+            plt.savefig(plot_path)
+            print(f"Saved plot: {plot_path}")
             plt.close()
 
         if step % 10000 == 0:
