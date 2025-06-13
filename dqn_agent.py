@@ -76,7 +76,7 @@ class DQNAgent:
 
     def update(self):
         if len(self.replay_buffer) < self.batch_size:
-            return
+            return None
         states, actions, rewards, next_states, dones = self.replay_buffer.sample(self.batch_size)
         states = torch.FloatTensor(states).to(self.device)
         actions = torch.LongTensor(actions).unsqueeze(1).to(self.device)
@@ -96,6 +96,8 @@ class DQNAgent:
 
         if self.total_steps % self.target_sync == 0:
             self.target_net.load_state_dict(self.q_net.state_dict())
+
+        return loss.item()
 
     def step(self):
         self.total_steps += 1
