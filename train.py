@@ -12,25 +12,39 @@ from dqn_agent import DQNAgent
 
 
 def run_evaluation(agent, num_games):
+    # create num_games parallel envs
     eval_env = SyncVectorEnv([make_env for _ in range(num_games)])
+
     state, _ = eval_env.reset()
-    wins = 0
-    done_flags = np.zeros(num_games, dtype=bool)
-    while not done_flags.all():
+    # track cumulative reward for each parallel game
+    total_rewards = np.zeros(num_games, dtype=float)
+    done_flags    = np.zeros(num_games, dtype=bool)
+
+    # cap to avoid infinite loops if games never terminate
+    max_eval_steps = KlondikeEnv().max_moves * 5
+    eval_steps = 0
+
+    while not done_flags.all() and eval_steps < max_eval_steps:
+        # always act greedily during eval
         actions = [agent.select_action(s, eval=True) for s in state]
         next_state, rewards, dones, truncs, _ = eval_env.step(actions)
-        wins += rewards.sum()
+
+        # accumulate per-step rewards
+        total_rewards += rewards
+
         state = next_state
         done_flags = np.logical_or(dones, truncs)
-    eval_env.close()
-    return wins / num_games
+        eval_steps += 1
 
+    eval_env.close()
+    # average total reward per game
+    return total_rewards.mean()
 
 def make_env():
     return KlondikeEnv()
 
 
-def train(total_steps=10000000, num_envs=32, checkpoint_dir="checkpoints"):
+def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
     os.makedirs(checkpoint_dir, exist_ok=True)
     plots_dir = "plots"
     os.makedirs(plots_dir, exist_ok=True)
@@ -101,8 +115,7 @@ def train(total_steps=10000000, num_envs=32, checkpoint_dir="checkpoints"):
             recent_win_rate = wins.sum() / num_envs
             avg_r_last = recent_reward / log_interval
             tqdm.write(
-                f"[Step {step}] loss={loss:.4f}  ε={agent.epsilon:.3f}  win_rate={recent_win_rate:.3f}  avg_reward={avg_r_last:.3f}",
-                flush=True,
+                f"[Step {step}] loss={loss:.4f}  ε={agent.epsilon:.3f}  win_rate={recent_win_rate:.3f}  avg_reward={avg_r_last:.3f}"
             )
             wins[:] = 0
             recent_reward = 0.0
@@ -116,10 +129,10 @@ def train(total_steps=10000000, num_envs=32, checkpoint_dir="checkpoints"):
         if step % eval_interval == 0:
             old_eps = agent.epsilon
             agent.epsilon = 0.0
-            tqdm.write(f"Running evaluation at step {step}...", flush=True)
+            tqdm.write(f"Running evaluation at step {step}...")
             eval_win_rate = run_evaluation(agent, num_eval_games)
             writer.add_scalar("eval/win_rate", eval_win_rate, step)
-            tqdm.write(f">>> Eval @ {step}: win_rate={eval_win_rate:.3f}", flush=True)
+            tqdm.write(f">>> Eval @ {step}: win_rate={eval_win_rate:.3f}")
             agent.epsilon = old_eps
 
         if step % plot_interval == 0 and loss is not None:
@@ -137,7 +150,7 @@ def train(total_steps=10000000, num_envs=32, checkpoint_dir="checkpoints"):
             plt.legend()
             plot_path = os.path.join(plots_dir, f"win_rate_{step}.png")
             plt.savefig(plot_path)
-            tqdm.write(f"Saved plot: {plot_path}", flush=True)
+            tqdm.write(f"Saved plot: {plot_path}")
             plt.close()
 
         if step % 10000 == 0:
@@ -146,10 +159,9 @@ def train(total_steps=10000000, num_envs=32, checkpoint_dir="checkpoints"):
             torch.save(agent.q_net.state_dict(), torch_path)
             elapsed = time.time() - start_time
             tqdm.write(
-                f"\u2192 Step {step}: avg wins={avg_win:.3f}   elapsed={elapsed/60:.1f}m",
-                flush=True,
+                f"\u2192 Step {step}: avg wins={avg_win:.3f}   elapsed={elapsed/60:.1f}m"
             )
-            tqdm.write(f"  Saved checkpoint: {torch_path}", flush=True)
+            tqdm.write(f"  Saved checkpoint: {torch_path}")
             wins[:] = 0
 
     total_time = (time.time() - start_time) / 3600
