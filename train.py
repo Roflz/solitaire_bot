@@ -3,7 +3,7 @@ import time
 import numpy as np
 import torch
 from gym.vector import SyncVectorEnv
-from tqdm import trange
+from tqdm import trange, tqdm
 from torch.utils.tensorboard import SummaryWriter
 import matplotlib.pyplot as plt
 
@@ -99,8 +99,9 @@ def train(total_steps=10000000, num_envs=32, checkpoint_dir="checkpoints"):
         if step % log_interval == 0 and loss is not None:
             recent_win_rate = wins.sum() / num_envs
             avg_r_last = recent_reward / log_interval
-            print(
-                f"[Step {step}] loss={loss:.4f}  ε={agent.epsilon:.3f}  win_rate={recent_win_rate:.3f}  avg_reward={avg_r_last:.3f}"
+            tqdm.write(
+                f"[Step {step}] loss={loss:.4f}  ε={agent.epsilon:.3f}  win_rate={recent_win_rate:.3f}  avg_reward={avg_r_last:.3f}",
+                flush=True,
             )
             wins[:] = 0
             recent_reward = 0.0
@@ -114,10 +115,10 @@ def train(total_steps=10000000, num_envs=32, checkpoint_dir="checkpoints"):
         if step % eval_interval == 0:
             old_eps = agent.epsilon
             agent.epsilon = 0.0
-            print(f"Running evaluation at step {step}...")
+            tqdm.write(f"Running evaluation at step {step}...", flush=True)
             eval_win_rate = run_evaluation(agent, num_eval_games)
             writer.add_scalar("eval/win_rate", eval_win_rate, step)
-            print(f">>> Eval @ {step}: win_rate={eval_win_rate:.3f}")
+            tqdm.write(f">>> Eval @ {step}: win_rate={eval_win_rate:.3f}", flush=True)
             agent.epsilon = old_eps
 
         if step % plot_interval == 0 and loss is not None:
@@ -135,7 +136,7 @@ def train(total_steps=10000000, num_envs=32, checkpoint_dir="checkpoints"):
             plt.legend()
             plot_path = os.path.join(plots_dir, f"win_rate_{step}.png")
             plt.savefig(plot_path)
-            print(f"Saved plot: {plot_path}")
+            tqdm.write(f"Saved plot: {plot_path}", flush=True)
             plt.close()
 
         if step % 10000 == 0:
@@ -143,8 +144,11 @@ def train(total_steps=10000000, num_envs=32, checkpoint_dir="checkpoints"):
             torch_path = os.path.join(checkpoint_dir, f"dqn_{step}.pth")
             torch.save(agent.q_net.state_dict(), torch_path)
             elapsed = time.time() - start_time
-            print(f"\u2192 Step {step}: avg wins={avg_win:.3f}   elapsed={elapsed/60:.1f}m")
-            print(f"  Saved checkpoint: {torch_path}")
+            tqdm.write(
+                f"\u2192 Step {step}: avg wins={avg_win:.3f}   elapsed={elapsed/60:.1f}m",
+                flush=True,
+            )
+            tqdm.write(f"  Saved checkpoint: {torch_path}", flush=True)
             wins[:] = 0
 
     total_time = (time.time() - start_time) / 3600
