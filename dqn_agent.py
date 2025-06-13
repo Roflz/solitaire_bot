@@ -31,8 +31,13 @@ class ReplayBuffer:
     def sample(self, batch_size):
         batch = random.sample(self.buffer, batch_size)
         states, actions, rewards, next_states, dones = zip(*batch)
-        return (np.array(states), np.array(actions), np.array(rewards, dtype=np.float32),
-                np.array(next_states), np.array(dones, dtype=np.float32))
+        return (
+            np.array(states),
+            np.array(actions),
+            np.array(rewards, dtype=np.float32),
+            np.array(next_states),
+            np.array(dones, dtype=np.float32),
+        )
 
     def __len__(self):
         return len(self.buffer)
@@ -96,4 +101,3 @@ class DQNAgent:
         self.total_steps += 1
         decay_rate = max(0, (self.epsilon_decay_steps - self.total_steps) / self.epsilon_decay_steps)
         self.epsilon = self.epsilon_end + (self.epsilon_start - self.epsilon_end) * decay_rate
-
