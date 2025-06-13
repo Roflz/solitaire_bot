@@ -54,7 +54,10 @@ def run_evaluation(agent, num_games):
 
     while not done_flags.all() and eval_steps < max_eval_steps:
         # always act greedily during eval
-        actions = [agent.select_action(s, eval=True) for s in state]
+        actions = []
+        for i in range(num_games):
+            legal = list(range(len(eval_env.envs[i]._legal_moves()) + 1))
+            actions.append(agent.select_action(state[i], legal_actions=legal, eval=True))
         next_state, rewards, dones, truncs, _ = eval_env.step(actions)
 
         # accumulate per-step rewards
@@ -126,7 +129,10 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
         unit="step",
         leave=True,
     ):
-        actions = [agent.select_action(s) for s in state]
+        actions = []
+        for i in range(num_envs):
+            legal = list(range(len(env.envs[i]._legal_moves()) + 1))
+            actions.append(agent.select_action(state[i], legal_actions=legal))
         next_state, rewards, dones, truncs, _ = env.step(actions)
         done_flags = np.logical_or(dones, truncs)
         for i in range(num_envs):

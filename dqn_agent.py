@@ -64,13 +64,20 @@ class DQNAgent:
         self.action_dim = action_dim
         self.update_epsilon()
 
-    def select_action(self, state, eval=False):
+    def select_action(self, state, legal_actions=None, eval=False):
+        if legal_actions is None:
+            legal_actions = list(range(self.action_dim))
+
         if (not eval) and random.random() < self.epsilon:
-            return random.randrange(self.action_dim)
+            return random.choice(legal_actions)
+
         state_t = torch.FloatTensor(state).unsqueeze(0).to(self.device)
         with torch.no_grad():
-            q_vals = self.q_net(state_t)
-        return int(q_vals.argmax().item())
+            q_vals = self.q_net(state_t).cpu().numpy().flatten()
+
+        legal_q = [q_vals[a] for a in legal_actions]
+        best_idx = int(np.argmax(legal_q))
+        return legal_actions[best_idx]
 
     def store_transition(self, *args):
         self.replay_buffer.push(*args)
