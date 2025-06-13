@@ -154,27 +154,27 @@ class KlondikeEnv(gym.Env):
         return self._get_obs(), {}
 
     def step(self, action):
-        shaped_reward = 0
+        shaped_reward = 0.0
         moves = self._legal_moves()
         if action < len(moves):
             move = moves[action]
             pre_face_down = list(self.face_down_counts)
             if move[0] in ("t2f", "w2f"):
-                shaped_reward += 100
+                shaped_reward += 1.0
             if move[0] in ("w2t", "w2f"):
-                shaped_reward += 20
+                shaped_reward += 0.2
             self._apply_move(move)
             if move[0] in ("t2f", "t2t"):
                 col = move[1]
                 if pre_face_down[col] > self.face_down_counts[col]:
-                    shaped_reward += 20
+                    shaped_reward += 0.2
         else:
             recycling = len(self.state['waste_pile']) == 0
             self._flip_waste()
             if recycling:
-                shaped_reward -= 20
+                shaped_reward -= 0.2
         done = self._check_done()
-        reward = (1 if done else 0) + shaped_reward
+        reward = shaped_reward + (50.0 if done else 0.0)
         return self._get_obs(), reward, done, False, {}
 
     # Observation encoding

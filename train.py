@@ -133,9 +133,7 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
             agent.store_transition(state[i], actions[i], rewards[i], next_state[i], done_flags[i])
         recent_reward += rewards.mean()
         loss = agent.update()
-        prev_eps = agent.epsilon
         agent.step()
-        agent.epsilon = prev_eps
         state = next_state
 
         if step % log_interval == 0 and loss is not None:
