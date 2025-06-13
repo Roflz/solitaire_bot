@@ -22,6 +22,7 @@ def run_evaluation(agent, num_games):
         wins += rewards.sum()
         state = next_state
         done_flags = np.logical_or(dones, truncs)
+    eval_env.close()
     return wins / num_games
 
 
