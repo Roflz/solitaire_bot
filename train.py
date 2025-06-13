@@ -11,6 +11,34 @@ from solitaire_env import KlondikeEnv
 from dqn_agent import DQNAgent
 
 
+class AdaptiveEpsilon:
+    """Decay epsilon when evaluation reward plateaus."""
+
+    def __init__(self, agent, decay_factor=0.9, min_eps=0.02, patience=3):
+        self.agent = agent
+        self.decay_factor = decay_factor
+        self.min_eps = min_eps
+        self.patience = patience
+        self.best_score = -float("inf")
+        self.bad_epochs = 0
+
+    def step(self, eval_score):
+        if eval_score > self.best_score:
+            self.best_score = eval_score
+            self.bad_epochs = 0
+            return
+
+        self.bad_epochs += 1
+        if self.bad_epochs >= self.patience:
+            new_eps = max(self.min_eps, self.agent.epsilon * self.decay_factor)
+            if new_eps < self.agent.epsilon:
+                tqdm.write(
+                    f"Decaying ε from {self.agent.epsilon:.3f} to {new_eps:.3f} (eval plateau)"
+                )
+            self.agent.epsilon = new_eps
+            self.bad_epochs = 0
+
+
 def run_evaluation(agent, num_games):
     # create num_games parallel envs
     eval_env = SyncVectorEnv([make_env for _ in range(num_games)])
@@ -57,7 +85,7 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
     num_eval_games = 100
 
     writer = SummaryWriter(log_dir="runs/solitaire")
-    metrics = {"loss": [], "train_win_rate": [], "eval_win_rate": []}
+    metrics = {"loss": [], "train_avg_reward": [], "eval_avg_reward": []}
     steps = []
 
     sample_env = KlondikeEnv()
@@ -66,6 +94,7 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
         sample_env.action_space.n,
         epsilon_decay_steps=total_steps,
     )
+    eps_scheduler = AdaptiveEpsilon(agent, decay_factor=0.9, min_eps=0.02, patience=3)
 
     ckpts = [f for f in os.listdir(checkpoint_dir) if f.startswith("dqn_") and f.endswith(".pth")]
     start_step = 0
@@ -87,8 +116,6 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
     start_time = time.time()
     env = SyncVectorEnv([make_env for _ in range(num_envs)])
     state, _ = env.reset()
-    wins = np.zeros(num_envs, dtype=int)
-    recent_win_rate = 0
     recent_reward = 0.0
     avg_r_last = 0.0
 
@@ -104,65 +131,61 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
         done_flags = np.logical_or(dones, truncs)
         for i in range(num_envs):
             agent.store_transition(state[i], actions[i], rewards[i], next_state[i], done_flags[i])
-            if done_flags[i] and rewards[i] > 0:
-                wins[i] += 1
         recent_reward += rewards.mean()
         loss = agent.update()
+        prev_eps = agent.epsilon
         agent.step()
+        agent.epsilon = prev_eps
         state = next_state
 
         if step % log_interval == 0 and loss is not None:
-            recent_win_rate = wins.sum() / num_envs
             avg_r_last = recent_reward / log_interval
             tqdm.write(
-                f"[Step {step}] loss={loss:.4f}  ε={agent.epsilon:.3f}  win_rate={recent_win_rate:.3f}  avg_reward={avg_r_last:.3f}"
+                f"[Step {step}] loss={loss:.4f}  ε={agent.epsilon:.3f}  avg_reward={avg_r_last:.3f}"
             )
-            wins[:] = 0
             recent_reward = 0.0
 
         if step % tb_interval == 0 and loss is not None:
             writer.add_scalar("train/loss", loss, step)
             writer.add_scalar("train/ε", agent.epsilon, step)
-            writer.add_scalar("train/win_rate", recent_win_rate, step)
             writer.add_scalar("train/avg_reward", avg_r_last, step)
 
         if step % eval_interval == 0:
             old_eps = agent.epsilon
             agent.epsilon = 0.0
             tqdm.write(f"Running evaluation at step {step}...")
-            eval_win_rate = run_evaluation(agent, num_eval_games)
-            writer.add_scalar("eval/win_rate", eval_win_rate, step)
-            tqdm.write(f">>> Eval @ {step}: win_rate={eval_win_rate:.3f}")
+            eval_avg_reward = run_evaluation(agent, num_eval_games)
+            writer.add_scalar("eval/avg_reward", eval_avg_reward, step)
+            tqdm.write(f">>> Eval @ {step}: avg_reward={eval_avg_reward:.3f}")
             agent.epsilon = old_eps
+            eps_scheduler.step(eval_avg_reward)
 
         if step % plot_interval == 0 and loss is not None:
             steps.append(step)
             metrics["loss"].append(loss)
-            metrics["train_win_rate"].append(recent_win_rate)
-            metrics["eval_win_rate"].append(
-                eval_win_rate if "eval_win_rate" in locals() else np.nan
+            metrics["train_avg_reward"].append(avg_r_last)
+            metrics["eval_avg_reward"].append(
+                eval_avg_reward if "eval_avg_reward" in locals() else np.nan
             )
             plt.figure()
-            plt.plot(steps, metrics["train_win_rate"], label="Train Win Rate")
-            plt.plot(steps, metrics["eval_win_rate"], label="Eval Win Rate")
+            plt.plot(steps, metrics["train_avg_reward"], label="Train Avg Reward")
+            plt.plot(steps, metrics["eval_avg_reward"], label="Eval Avg Reward")
             plt.xlabel("Steps")
-            plt.ylabel("Win Rate")
+            plt.ylabel("Avg Reward")
             plt.legend()
-            plot_path = os.path.join(plots_dir, f"win_rate_{step}.png")
+            plot_path = os.path.join(plots_dir, f"avg_reward_{step}.png")
             plt.savefig(plot_path)
             tqdm.write(f"Saved plot: {plot_path}")
             plt.close()
 
         if step % 10000 == 0:
-            avg_win = wins.sum() / (num_envs)
             torch_path = os.path.join(checkpoint_dir, f"dqn_{step}.pth")
             torch.save(agent.q_net.state_dict(), torch_path)
             elapsed = time.time() - start_time
             tqdm.write(
-                f"\u2192 Step {step}: avg wins={avg_win:.3f}   elapsed={elapsed/60:.1f}m"
+                f"\u2192 Step {step}: checkpoint saved   elapsed={elapsed/60:.1f}m"
             )
             tqdm.write(f"  Saved checkpoint: {torch_path}")
-            wins[:] = 0
 
     total_time = (time.time() - start_time) / 3600
     print(f"Training complete in {total_time:.1f} hours")
