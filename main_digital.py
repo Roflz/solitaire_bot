@@ -19,7 +19,7 @@ if os.path.exists(MODEL_PATH):
     use_agent = True
 
 for _ in range(num_games):
-    state = env.reset()
+    state, _ = env.reset()
     done = False
     while not done:
         if use_agent:
@@ -27,7 +27,7 @@ for _ in range(num_games):
         else:
             moves = env._legal_moves()
             action = 0 if moves else env.action_space.n - 1
-        state, reward, done, _ = env.step(action)
+        state, reward, done, _, _ = env.step(action)
     if reward > 0:
         wins += 1
     else:

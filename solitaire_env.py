@@ -115,7 +115,8 @@ class KlondikeEnv(gym.Env):
         return all(len(pile) == 13 for pile in self.state['foundations'].values())
 
     # --- Gym API ----------------------------------------------------------
-    def reset(self):
+    def reset(self, *, seed=None, options=None):
+        super().reset(seed=seed)
         gs = game_setup.initialize_solitaire()
         columns = []
         face_down = []
@@ -131,7 +132,7 @@ class KlondikeEnv(gym.Env):
         }
         self.face_down_counts = face_down
         self._flip_waste()
-        return self._get_obs()
+        return self._get_obs(), {}
 
     def step(self, action):
         moves = self._legal_moves()
@@ -141,7 +142,7 @@ class KlondikeEnv(gym.Env):
             self._flip_waste()
         done = self._check_done()
         reward = 1 if done else 0
-        return self._get_obs(), reward, done, {}
+        return self._get_obs(), reward, done, False, {}
 
     # Observation encoding
     def _get_obs(self):
