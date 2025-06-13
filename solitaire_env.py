@@ -3,7 +3,7 @@ import gym
 from gym import spaces
 
 from scripts import game_setup
-from scripts.evaluate_moves import is_valid_column_move, is_king
+from scripts.evaluate_moves import is_valid_column_move
 
 # Simple Klondike environment using 3-card waste cycles.
 # Tableau columns contain full card names, with hidden cards
