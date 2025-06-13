@@ -3,7 +3,23 @@ import gym
 from gym import spaces
 
 from scripts import game_setup
-from scripts.evaluate_moves import is_valid_column_move
+# `is_valid_column_move` from `scripts.evaluate_moves` is reproduced here to
+# avoid importing the entire module (which requires GUI dependencies).
+def is_valid_column_move(card, target_card):
+    """Return True if ``card`` can be placed onto ``target_card`` in a column."""
+    card_rank, card_suit = card[:-1], card[-1]
+    target_rank, target_suit = target_card[:-1], target_card[-1]
+    if not card_rank:
+        return False
+
+    red_suits = {"H", "D"}
+    black_suits = {"C", "S"}
+    if (card_suit in red_suits and target_suit in red_suits) or \
+       (card_suit in black_suits and target_suit in black_suits):
+        return False
+
+    rank_order = "A23456789TJQK"
+    return rank_order.index(card_rank) + 1 == rank_order.index(target_rank)
 
 # Simple Klondike environment using 3-card waste cycles.
 # Tableau columns contain full card names, with hidden cards
@@ -32,7 +48,10 @@ class KlondikeEnv(gym.Env):
         pile = self.state['foundations'][suit]
         if not pile:
             return card[0] == 'A'
-        return RANK_ORDER.index(card[0]) == RANK_ORDER.index(pile[-1]) + 1
+        # Compare only the rank characters. ``pile[-1]`` stores full card names
+        # such as "5H", so we slice the rank before looking it up in
+        # ``RANK_ORDER``.
+        return RANK_ORDER.index(card[0]) == RANK_ORDER.index(pile[-1][0]) + 1
 
     def _can_move_to_column(self, card, column):
         if not column:

@@ -35,7 +35,7 @@ def evaluate_moves(game_state):
                     # Update Game State
                     move_card_to_foundation_from_waste(game_state, top_waste_card)
                     utils.capture_window("BlueStacks App Player")
-                    cards = utils.detect_suit_and_rank("C:\_\solitaire_bot\game_screenshot.bmp")
+                    cards = utils.detect_suit_and_rank(r"C:\_\solitaire_bot\game_screenshot.bmp")
                     game_state = utils.parse_game_state(game_state, cards)
                     print_moves([performed_moves[-1]])
 
@@ -63,7 +63,7 @@ def evaluate_moves(game_state):
                     # Update Game State
                     move_card_to_column_from_waste(game_state, to_column)
                     utils.capture_window("BlueStacks App Player")
-                    cards = utils.detect_suit_and_rank("C:\_\solitaire_bot\game_screenshot.bmp")
+                    cards = utils.detect_suit_and_rank(r"C:\_\solitaire_bot\game_screenshot.bmp")
                     game_state = utils.parse_game_state(game_state, cards)
                     print_moves([performed_moves[-1]])
 
@@ -98,7 +98,7 @@ def evaluate_moves(game_state):
             # Update Game State
             move_card_to_foundation_from_column(game_state, best_move["from_column"], best_move["card"])
             utils.capture_window("BlueStacks App Player")
-            cards = utils.detect_suit_and_rank("C:\_\solitaire_bot\game_screenshot.bmp")
+            cards = utils.detect_suit_and_rank(r"C:\_\solitaire_bot\game_screenshot.bmp")
             game_state = utils.parse_game_state(game_state, cards)
             performed_moves.append(best_move)
             print_moves([performed_moves[-1]])
@@ -142,7 +142,7 @@ def evaluate_moves(game_state):
             automate_moves.perform_move(move)
             move_card_to_column_from_column(game_state, best_move["from_column"], best_move["card"])
             utils.capture_window("BlueStacks App Player")
-            cards = utils.detect_suit_and_rank("C:\_\solitaire_bot\game_screenshot.bmp")
+            cards = utils.detect_suit_and_rank(r"C:\_\solitaire_bot\game_screenshot.bmp")
             game_state = utils.parse_game_state(game_state, cards)
             performed_moves.append(best_move)
             print_moves([performed_moves[-1]])
@@ -186,7 +186,7 @@ def evaluate_moves(game_state):
             automate_moves.perform_move(move)
             move_card_to_column_from_column(game_state, best_move["from_column"], best_move["card"])
             utils.capture_window("BlueStacks App Player")
-            cards = utils.detect_suit_and_rank("C:\_\solitaire_bot\game_screenshot.bmp")
+            cards = utils.detect_suit_and_rank(r"C:\_\solitaire_bot\game_screenshot.bmp")
             game_state = utils.parse_game_state(game_state, cards)
             performed_moves.append(best_move)
             print_moves([performed_moves[-1]])
@@ -219,7 +219,7 @@ def evaluate_moves(game_state):
                 # Update Game State
                 move_card_to_foundation_from_waste(game_state, top_waste_card)
                 utils.capture_window("BlueStacks App Player")
-                cards = utils.detect_suit_and_rank("C:\_\solitaire_bot\game_screenshot.bmp")
+                cards = utils.detect_suit_and_rank(r"C:\_\solitaire_bot\game_screenshot.bmp")
                 game_state = utils.parse_game_state(game_state, cards)
                 print_moves([performed_moves[-1]])
 
@@ -247,7 +247,7 @@ def evaluate_moves(game_state):
                 # Update Game State
                 move_card_to_column_from_waste(game_state, to_column)
                 utils.capture_window("BlueStacks App Player")
-                cards = utils.detect_suit_and_rank("C:\_\solitaire_bot\game_screenshot.bmp")
+                cards = utils.detect_suit_and_rank(r"C:\_\solitaire_bot\game_screenshot.bmp")
                 game_state = utils.parse_game_state(game_state, cards)
                 print_moves([performed_moves[-1]])
 

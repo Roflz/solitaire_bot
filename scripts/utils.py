@@ -131,7 +131,9 @@ def detect_suit_and_rank(image_path, suit_threshold=0.9, rank_threshold=0.95):
 
     for suit in detected_suits:
         # Step 2: Detect Rank of cards
-        rank_templates_dir = f"{RANK_TEMPLATES_DIR}\{suit['name']}s"
+        # Build the path to the rank templates directory using os.path.join to
+        # avoid platform specific escaping issues.
+        rank_templates_dir = os.path.join(RANK_TEMPLATES_DIR, f"{suit['name']}s")
         best_match_score = 0
         best_result = []
 
