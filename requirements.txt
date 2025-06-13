@@ -3,3 +3,6 @@ numpy
 torch
 colorama
 Pillow
+tqdm
+matplotlib
+tensorboard
