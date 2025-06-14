@@ -55,7 +55,7 @@ def run_evaluation(agent, num_games):
     while not done_flags.all() and eval_steps < max_eval_steps:
         # always act greedily during eval
         legal_lists = [
-            list(range(len(eval_env.envs[i]._legal_moves()) + 1))
+            np.flatnonzero(eval_env.envs[i]._legal_mask()).tolist()
             for i in range(num_games)
         ]
         actions = [
@@ -148,7 +148,7 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
         leave=True,
     ):
         legal_lists = [
-            list(range(len(env.envs[i]._legal_moves()) + 1)) for i in range(num_envs)
+            np.flatnonzero(env.envs[i]._legal_mask()).tolist() for i in range(num_envs)
         ]
         actions = [
             agent.select_action(state[i], legal_lists[i]) for i in range(num_envs)
@@ -156,7 +156,7 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
         next_state, rewards, dones, truncs, _ = env.step(actions)
         done_flags = np.logical_or(dones, truncs)
         next_legal_lists = [
-            list(range(len(env.envs[i]._legal_moves()) + 1)) for i in range(num_envs)
+            np.flatnonzero(env.envs[i]._legal_mask()).tolist() for i in range(num_envs)
         ]
         masks_next = np.zeros((num_envs, agent.action_dim), dtype=np.float32)
         for i in range(num_envs):
