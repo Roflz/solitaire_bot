@@ -114,19 +114,29 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
         last_ckpt = ckpts[-1]
         start_step = int(last_ckpt.split("_")[1].split(".")[0])
         path = os.path.join(checkpoint_dir, last_ckpt)
-        agent.q_net.load_state_dict(torch.load(path))
-        agent.target_net.load_state_dict(agent.q_net.state_dict())
-        agent.total_steps = start_step
-        if agent.total_steps < agent.warmup_steps:
-            agent.epsilon = agent.epsilon_start
-        elif agent.total_steps < agent.warmup_steps + agent.decay_steps:
-            frac = (agent.total_steps - agent.warmup_steps) / agent.decay_steps
-            agent.epsilon = (
-                agent.epsilon_start - (agent.epsilon_start - agent.epsilon_end) * frac
+        state_dict = torch.load(path)
+        try:
+            agent.q_net.load_state_dict(state_dict)
+        except RuntimeError as e:
+            print(
+                f"Could not load checkpoint '{path}' due to mismatched architecture: {e}"
             )
+            print("Starting training from scratch.")
+            start_step = 0
         else:
-            agent.epsilon = agent.epsilon_end
-        print(f"Loaded checkpoint '{path}' (starting from step {start_step})")
+            agent.target_net.load_state_dict(agent.q_net.state_dict())
+            agent.total_steps = start_step
+            if agent.total_steps < agent.warmup_steps:
+                agent.epsilon = agent.epsilon_start
+            elif agent.total_steps < agent.warmup_steps + agent.decay_steps:
+                frac = (agent.total_steps - agent.warmup_steps) / agent.decay_steps
+                agent.epsilon = (
+                    agent.epsilon_start
+                    - (agent.epsilon_start - agent.epsilon_end) * frac
+                )
+            else:
+                agent.epsilon = agent.epsilon_end
+            print(f"Loaded checkpoint '{path}' (starting from step {start_step})")
 
     print(
         f"Starting training: total_steps={total_steps}, num_envs={num_envs}, device={agent.device}"
