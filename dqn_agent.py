@@ -1,6 +1,8 @@
 import random
 from collections import deque
 
+import math
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -9,29 +11,51 @@ import torch.nn as nn
 class QNetwork(nn.Module):
     def __init__(self, input_dim, output_dim):
         super().__init__()
-        self.net = nn.Sequential(
+        self.feature = nn.Sequential(
             nn.Linear(input_dim, 512),
             nn.ReLU(),
+        )
+        self.advantage = nn.Sequential(
             nn.Linear(512, 256),
             nn.ReLU(),
             nn.Linear(256, output_dim),
         )
+        self.value = nn.Sequential(
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Linear(256, 1),
+        )
 
     def forward(self, x):
-        return self.net(x)
+        x = self.feature(x)
+        adv = self.advantage(x)
+        val = self.value(x)
+        return val + adv - adv.mean(dim=1, keepdim=True)
 
 
-class ReplayBuffer:
-    def __init__(self, capacity, action_dim):
+class PrioritizedReplayBuffer:
+    def __init__(self, capacity, action_dim, alpha=0.6):
         self.buffer = deque(maxlen=capacity)
+        self.priorities = deque(maxlen=capacity)
         self.action_dim = action_dim
+        self.alpha = alpha
 
     def push(self, state, action, reward, next_state, done, legal_next):
+        max_prio = max(self.priorities) if self.priorities else 1.0
         self.buffer.append((state, action, reward, next_state, done, legal_next))
+        self.priorities.append(max_prio)
 
-    def sample(self, batch_size):
-        batch = random.sample(self.buffer, batch_size)
-        states, actions, rewards, next_states, dones, legal_next = zip(*batch)
+    def sample(self, batch_size, beta=0.4):
+        if len(self.buffer) == 0:
+            return None
+        prios = np.array(self.priorities, dtype=np.float32)
+        probs = prios ** self.alpha
+        probs /= probs.sum()
+        indices = np.random.choice(len(self.buffer), batch_size, p=probs)
+        samples = [self.buffer[idx] for idx in indices]
+        weights = (len(self.buffer) * probs[indices]) ** (-beta)
+        weights /= weights.max()
+        states, actions, rewards, next_states, dones, legal_next = zip(*samples)
         return (
             np.array(states),
             np.array(actions),
@@ -39,7 +63,13 @@ class ReplayBuffer:
             np.array(next_states),
             np.array(dones, dtype=np.float32),
             np.array(legal_next, dtype=np.float32),
+            indices,
+            np.array(weights, dtype=np.float32).reshape(-1, 1),
         )
+
+    def update_priorities(self, indices, priorities):
+        for idx, prio in zip(indices, priorities):
+            self.priorities[idx] = float(prio)
 
     def __len__(self):
         return len(self.buffer)
@@ -58,6 +88,8 @@ class DQNAgent:
         lr=3e-4,
         batch_size=64,
         target_sync=500,
+        prio_alpha=0.6,
+        prio_beta_start=0.4,
     ):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.q_net = QNetwork(obs_dim, action_dim).to(self.device)
@@ -65,7 +97,7 @@ class DQNAgent:
         self.target_net.load_state_dict(self.q_net.state_dict())
         self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=lr)
 
-        self.replay_buffer = ReplayBuffer(200000, action_dim)
+        self.replay_buffer = PrioritizedReplayBuffer(200000, action_dim, alpha=prio_alpha)
         self.batch_size = batch_size
         self.gamma = gamma
         self.epsilon_start = epsilon_start
@@ -76,6 +108,7 @@ class DQNAgent:
         self.total_steps = 0
         self.target_sync = target_sync
         self.action_dim = action_dim
+        self.prio_beta_start = prio_beta_start
 
     def select_action(self, state, legal_actions=None, eval=False):
         if legal_actions is None:
@@ -98,28 +131,37 @@ class DQNAgent:
     def update(self):
         if len(self.replay_buffer) < self.batch_size:
             return None
-        states, actions, rewards, next_states, dones, legal_next = (
-            self.replay_buffer.sample(self.batch_size)
-        )
+        sample = self.replay_buffer.sample(self.batch_size, beta=min(1.0, self.prio_beta_start + self.total_steps * 1e-6))
+        if sample is None:
+            return None
+        states, actions, rewards, next_states, dones, legal_next, indices, weights = sample
         states = torch.FloatTensor(states).to(self.device)
         actions = torch.LongTensor(actions).unsqueeze(1).to(self.device)
         rewards = torch.FloatTensor(rewards).unsqueeze(1).to(self.device)
         next_states = torch.FloatTensor(next_states).to(self.device)
         dones = torch.FloatTensor(dones).unsqueeze(1).to(self.device)
         legal_next = torch.FloatTensor(legal_next).to(self.device)
+        weights_t = torch.FloatTensor(weights).to(self.device)
 
         q_values = self.q_net(states).gather(1, actions)
         with torch.no_grad():
-            next_q_all = self.target_net(next_states)
+            next_q_all_online = self.q_net(next_states)
             illegal_mask = legal_next == 0
-            next_q_all[illegal_mask] = -float("inf")
-            next_q = next_q_all.max(1)[0].unsqueeze(1)
+            next_q_all_online[illegal_mask] = -float("inf")
+            best_next_actions = next_q_all_online.max(1)[1].unsqueeze(1)
+            next_q_all_target = self.target_net(next_states)
+            next_q_all_target[illegal_mask] = -float("inf")
+            next_q = next_q_all_target.gather(1, best_next_actions)
             target = rewards + self.gamma * next_q * (1 - dones)
-        loss = nn.functional.mse_loss(q_values, target)
+        td_error = target - q_values
+        loss = (weights_t * nn.functional.smooth_l1_loss(q_values, target, reduction="none")).mean()
 
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
+
+        prios = td_error.abs().detach().cpu().numpy() + 1e-5
+        self.replay_buffer.update_priorities(indices, prios)
 
         if self.total_steps % self.target_sync == 0:
             self.target_net.load_state_dict(self.q_net.state_dict())

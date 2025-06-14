@@ -1,8 +1,9 @@
 import os
 import time
+import argparse
 import numpy as np
 import torch
-from gym.vector import SyncVectorEnv
+from gym.vector import SyncVectorEnv, SubprocVectorEnv
 from tqdm import trange, tqdm
 from torch.utils.tensorboard import SummaryWriter
 import matplotlib.pyplot as plt
@@ -39,11 +40,15 @@ class AdaptiveEpsilon:
             self.bad_epochs = 0
 
 
-def run_evaluation(agent, num_games):
+def run_evaluation(agent, num_games, capture_dir=None):
     # create num_games parallel envs
-    eval_env = SyncVectorEnv([make_env for _ in range(num_games)])
+    if capture_dir is None:
+        eval_env = SubprocVectorEnv([make_env for _ in range(num_games)])
+    else:
+        eval_env = SyncVectorEnv([make_env for _ in range(num_games)])
 
     state, _ = eval_env.reset()
+    frames = []
     # track cumulative reward for each parallel game
     total_rewards = np.zeros(num_games, dtype=float)
     done_flags = np.zeros(num_games, dtype=bool)
@@ -58,10 +63,7 @@ def run_evaluation(agent, num_games):
             np.flatnonzero(eval_env.envs[i]._legal_mask()).tolist()
             for i in range(num_games)
         ]
-        actions = [
-            agent.select_action(state[i], legal_lists[i], eval=True)
-            for i in range(num_games)
-        ]
+        actions = [agent.select_action(state[i], legal_lists[i], eval=True) for i in range(num_games)]
         next_state, rewards, dones, truncs, _ = eval_env.step(actions)
 
         # accumulate per-step rewards
@@ -70,8 +72,15 @@ def run_evaluation(agent, num_games):
         state = next_state
         done_flags = np.logical_or(dones, truncs)
         eval_steps += 1
+        if capture_dir is not None:
+            frames.append(eval_env.envs[0].render())
 
     eval_env.close()
+    if capture_dir is not None and frames:
+        os.makedirs(capture_dir, exist_ok=True)
+        fname = os.path.join(capture_dir, f"traj_{int(time.time())}.txt")
+        with open(fname, "w") as f:
+            f.write("\n\n".join(frames))
     # average total reward per game
     return total_rewards.mean()
 
@@ -80,7 +89,7 @@ def make_env():
     return KlondikeEnv()
 
 
-def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
+def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints", eval_interval=10000):
     os.makedirs(checkpoint_dir, exist_ok=True)
     plots_dir = "plots"
     os.makedirs(plots_dir, exist_ok=True)
@@ -89,7 +98,6 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
     log_interval = 1000
     tb_interval = 500
     plot_interval = 2000
-    eval_interval = 10000
     num_eval_games = 100
 
     writer = SummaryWriter(log_dir="runs/solitaire")
@@ -145,10 +153,16 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
         "TensorBoard logging to runs/solitaire - run 'tensorboard --logdir runs/solitaire' to view"
     )
     start_time = time.time()
-    env = SyncVectorEnv([make_env for _ in range(num_envs)])
+    best_eval = -float("inf")
+    env = SubprocVectorEnv([make_env for _ in range(num_envs)])
     state, _ = env.reset()
     recent_reward = 0.0
     avg_r_last = 0.0
+    episode_rewards = np.zeros(num_envs, dtype=float)
+    episode_lengths = np.zeros(num_envs, dtype=int)
+    total_episode_length = 0
+    completed_episodes = 0
+    win_count = 0
 
     for step in trange(
         start_step + 1,
@@ -165,6 +179,8 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
         ]
         next_state, rewards, dones, truncs, _ = env.step(actions)
         done_flags = np.logical_or(dones, truncs)
+        episode_rewards += rewards
+        episode_lengths += 1
         next_legal_lists = [
             np.flatnonzero(env.envs[i]._legal_mask()).tolist() for i in range(num_envs)
         ]
@@ -180,6 +196,16 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
                 masks_next[i],
             )
         recent_reward += rewards.mean()
+        for i in range(num_envs):
+            if done_flags[i]:
+                completed_episodes += 1
+                total_episode_length += episode_lengths[i]
+                if rewards[i] > 0:
+                    win_count += 1
+                writer.add_scalar("train/episode_length", episode_lengths[i], step)
+                writer.add_scalar("train/win", 1 if rewards[i] > 0 else 0, step)
+                episode_rewards[i] = 0
+                episode_lengths[i] = 0
         loss = None
         if len(agent.replay_buffer) > agent.warmup_steps:
             loss = agent.update()
@@ -197,16 +223,29 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
             writer.add_scalar("train/loss", loss, step)
             writer.add_scalar("train/ε", agent.epsilon, step)
             writer.add_scalar("train/avg_reward", avg_r_last, step)
+            if completed_episodes > 0:
+                writer.add_scalar("train/win_rate", win_count / completed_episodes, step)
+                writer.add_scalar(
+                    "train/avg_episode_length",
+                    total_episode_length / completed_episodes,
+                    step,
+                )
 
         if step % eval_interval == 0:
             old_eps = agent.epsilon
             agent.epsilon = 0.0
             tqdm.write(f"Running evaluation at step {step}...")
-            eval_avg_reward = run_evaluation(agent, num_eval_games)
+            capture = "trajectories" if step == eval_interval else None
+            eval_avg_reward = run_evaluation(agent, num_eval_games, capture_dir=capture)
             writer.add_scalar("eval/avg_reward", eval_avg_reward, step)
             tqdm.write(f">>> Eval @ {step}: avg_reward={eval_avg_reward:.3f}")
             agent.epsilon = old_eps
             eps_scheduler.step(eval_avg_reward)
+            if eval_avg_reward > best_eval:
+                best_eval = eval_avg_reward
+                best_path = os.path.join(checkpoint_dir, "dqn_best.pth")
+                torch.save(agent.q_net.state_dict(), best_path)
+                tqdm.write(f"New best model saved to {best_path}")
 
         if step % plot_interval == 0 and loss is not None:
             steps.append(step)
@@ -241,4 +280,10 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
 
 
 if __name__ == "__main__":
-    train()
+    parser = argparse.ArgumentParser(description="Train DQN agent for Solitaire")
+    parser.add_argument("--steps", type=int, default=1000000, help="Total training steps")
+    parser.add_argument("--envs", type=int, default=32, help="Number of parallel environments")
+    parser.add_argument("--eval-freq", type=int, default=10000, help="Evaluation interval")
+    parser.add_argument("--checkpoint-dir", type=str, default="checkpoints", help="Directory to store checkpoints")
+    args = parser.parse_args()
+    train(total_steps=args.steps, num_envs=args.envs, checkpoint_dir=args.checkpoint_dir, eval_interval=args.eval_freq)

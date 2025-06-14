@@ -179,7 +179,7 @@ class KlondikeEnv(gym.Env):
     # --- Gym API ----------------------------------------------------------
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
-        gs = game_setup.initialize_solitaire()
+        gs = game_setup.initialize_solitaire(seed)
         columns = []
         face_down = []
         for idx in range(1, 8):
@@ -283,3 +283,16 @@ class KlondikeEnv(gym.Env):
             return 11, True
         # waste pile
         return 12, False
+
+    def render(self):
+        lines = []
+        f_str = " ".join(f"{s}:{''.join(self.state['foundations'][s]) or '-'}" for s in SUITS)
+        lines.append(f"Foundations: {f_str}")
+        lines.append(
+            f"Waste: {' '.join(self.state['waste']) or '-'} | Pile: {len(self.state['waste_pile'])}"
+        )
+        for i, col in enumerate(self.state['columns']):
+            hidden = self.face_down_counts[i]
+            visible = col[hidden:]
+            lines.append(f"C{i}: {'X'*hidden} {' '.join(visible)}")
+        return "\n".join(lines)
