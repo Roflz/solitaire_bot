@@ -52,8 +52,15 @@ class PrioritizedReplayBuffer:
             return None
         prios = np.array(self.priorities, dtype=np.float32)
         probs = prios ** self.alpha
-        probs /= probs.sum()
-        indices = np.random.choice(len(self.buffer), batch_size, p=probs)
+        probs_sum = probs.sum()
+        if probs_sum == 0:
+            probs = np.ones_like(probs) / len(probs)
+        else:
+            probs = probs / probs_sum
+        try:
+            indices = random.choices(range(len(self.buffer)), weights=probs, k=batch_size)
+        except MemoryError:
+            indices = [random.randrange(len(self.buffer)) for _ in range(batch_size)]
         samples = [self.buffer[idx] for idx in indices]
         weights = (len(self.buffer) * probs[indices]) ** (-beta)
         weights /= weights.max()
