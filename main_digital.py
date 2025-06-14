@@ -1,10 +1,11 @@
 import os
 import torch
+import numpy as np
 
 from solitaire_env import KlondikeEnv
 from dqn_agent import DQNAgent
 
-MODEL_PATH = os.path.join('checkpoints', 'dqn_final.pth')
+MODEL_PATH = os.path.join("checkpoints", "dqn_final.pth")
 
 num_games = 100
 wins = 0
@@ -25,8 +26,8 @@ for _ in range(num_games):
         if use_agent:
             action = agent.select_action(state, eval=True)
         else:
-            moves = env._legal_moves()
-            action = 0 if moves else env.action_space.n - 1
+            legal = np.flatnonzero(env._legal_mask()).tolist()
+            action = legal[0] if legal else 0
         state, reward, done, _, _ = env.step(action)
     if reward > 0:
         wins += 1
