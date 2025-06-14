@@ -46,8 +46,11 @@ class KlondikeEnv(gym.Env):
         # 1-7: tableau i -> foundation
         # 8-14: waste -> tableau i
         # 15: waste -> foundation
-        # 16-64: tableau i -> tableau j (i*7 + j)
-        self.action_space = spaces.Discrete(65)
+        # 16-43: foundation suit -> tableau j (suit*7 + j)
+        # 44+: tableau i -> tableau j starting at index k
+        #     encoded as 44 + ((i*7 + j) * MAX_SEQ_START) + k
+        self.MAX_SEQ_START = 20
+        self.action_space = spaces.Discrete(44 + 49 * self.MAX_SEQ_START)
         self.observation_space = spaces.Box(
             0.0, 1.0, shape=(52 * (self.num_locations + 1),), dtype=np.float32
         )
@@ -112,6 +115,10 @@ class KlondikeEnv(gym.Env):
         elif kind == "w2t":
             col = move[1]
             self.state["columns"][col].append(self.state["waste"].pop())
+        elif kind == "f2t":
+            suit, col = move[1], move[2]
+            card = self.state["foundations"][suit].pop()
+            self.state["columns"][col].append(card)
         elif kind == "t2t":
             from_c, start, to_c = move[1], move[2], move[3]
             seq = self.state["columns"][from_c][start:]
@@ -140,16 +147,26 @@ class KlondikeEnv(gym.Env):
                 if self._can_move_to_column(card, self.state["columns"][j]):
                     mask[8 + j] = 1.0
 
-        # tableau -> tableau (longest valid sequence)
+        # foundation -> tableau
+        for s, suit in enumerate(SUITS):
+            pile = self.state["foundations"][suit]
+            if pile:
+                card = pile[-1]
+                for j in range(7):
+                    if self._can_move_to_column(card, self.state["columns"][j]):
+                        mask[16 + s * 7 + j] = 1.0
+
+        # tableau -> tableau (all visible sequences up to MAX_SEQ_START)
         for i, column in enumerate(self.state["columns"]):
-            for j in range(7):
-                if i == j:
-                    continue
-                for start in range(self.face_down_counts[i], len(column)):
-                    seq = column[start:]
+            max_start = min(len(column), self.MAX_SEQ_START)
+            for start in range(self.face_down_counts[i], max_start):
+                seq = column[start:]
+                for j in range(7):
+                    if i == j:
+                        continue
                     if self._can_move_sequence(seq, self.state["columns"][j]):
-                        mask[16 + i * 7 + j] = 1.0
-                        break
+                        idx = 44 + (i * 7 + j) * self.MAX_SEQ_START + start
+                        mask[idx] = 1.0
 
         return mask
 
@@ -183,10 +200,15 @@ class KlondikeEnv(gym.Env):
             return ("w2t", action - 8)
         if action == 15:
             return ("w2f", None)
-        if 16 <= action <= 64:
+        if 16 <= action < 44:
             idx = action - 16
-            i, j = divmod(idx, 7)
-            return ("t2t", i, j)
+            s, j = divmod(idx, 7)
+            return ("f2t", SUITS[s], j)
+        if action >= 44:
+            idx = action - 44
+            pair, start = divmod(idx, self.MAX_SEQ_START)
+            i, j = divmod(pair, 7)
+            return ("t2t", i, start, j)
         return None
 
     def _is_legal(self, action):
@@ -208,15 +230,6 @@ class KlondikeEnv(gym.Env):
                 shaped_reward += 1.0
             if move[0] in ("w2t", "w2f"):
                 shaped_reward += 0.2
-            if move[0] == "t2t":
-                from_c, to_c = move[1], move[2]
-                for start in range(
-                    self.face_down_counts[from_c], len(self.state["columns"][from_c])
-                ):
-                    seq = self.state["columns"][from_c][start:]
-                    if self._can_move_sequence(seq, self.state["columns"][to_c]):
-                        move = ("t2t", from_c, start, to_c)
-                        break
             self._apply_move(move)
             if move[0] in ("t2f", "t2t"):
                 col = move[1]
