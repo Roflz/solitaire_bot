@@ -30,7 +30,9 @@ def deal_tableau(deck):
 
 
 # Initialize the game state
-def initialize_solitaire():
+def initialize_solitaire(seed=None):
+    if seed is not None:
+        random.seed(seed)
     deck = create_deck()
     shuffled_deck = shuffle_deck(deck)
 

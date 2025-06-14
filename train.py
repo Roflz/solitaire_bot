@@ -1,14 +1,36 @@
 import os
 import time
+import argparse
+
+# suppress verbose TensorFlow messages
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
 import numpy as np
 import torch
-from gym.vector import SyncVectorEnv
+from gym.vector import SyncVectorEnv, AsyncVectorEnv
 from tqdm import trange, tqdm
-from torch.utils.tensorboard import SummaryWriter
+try:
+    from torch.utils.tensorboard import SummaryWriter
+except Exception as e:  # pragma: no cover - optional dependency
+    print(f"TensorBoard logging disabled: {e}")
+
+    class SummaryWriter:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def add_scalar(self, *args, **kwargs):
+            pass
+
+        def close(self):
+            pass
+
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from solitaire_env import KlondikeEnv
 from dqn_agent import DQNAgent
+from PIL import Image, ImageDraw, ImageFont
 
 
 class AdaptiveEpsilon:
@@ -39,11 +61,15 @@ class AdaptiveEpsilon:
             self.bad_epochs = 0
 
 
-def run_evaluation(agent, num_games):
+def run_evaluation(agent, num_games, capture_dir=None):
     # create num_games parallel envs
-    eval_env = SyncVectorEnv([make_env for _ in range(num_games)])
+    if capture_dir is None:
+        eval_env = AsyncVectorEnv([make_env for _ in range(num_games)])
+    else:
+        eval_env = SyncVectorEnv([make_env for _ in range(num_games)])
 
     state, _ = eval_env.reset()
+    frames = []
     # track cumulative reward for each parallel game
     total_rewards = np.zeros(num_games, dtype=float)
     done_flags = np.zeros(num_games, dtype=bool)
@@ -54,14 +80,9 @@ def run_evaluation(agent, num_games):
 
     while not done_flags.all() and eval_steps < max_eval_steps:
         # always act greedily during eval
-        legal_lists = [
-            np.flatnonzero(eval_env.envs[i]._legal_mask()).tolist()
-            for i in range(num_games)
-        ]
-        actions = [
-            agent.select_action(state[i], legal_lists[i], eval=True)
-            for i in range(num_games)
-        ]
+        legal_masks = eval_env.call("_legal_mask")
+        legal_lists = [np.flatnonzero(m).tolist() for m in legal_masks]
+        actions = [agent.select_action(state[i], legal_lists[i], eval=True) for i in range(num_games)]
         next_state, rewards, dones, truncs, _ = eval_env.step(actions)
 
         # accumulate per-step rewards
@@ -70,8 +91,27 @@ def run_evaluation(agent, num_games):
         state = next_state
         done_flags = np.logical_or(dones, truncs)
         eval_steps += 1
+        if capture_dir is not None:
+            frames.append(eval_env.envs[0].render())
 
     eval_env.close()
+    if capture_dir is not None and frames:
+        os.makedirs(capture_dir, exist_ok=True)
+        timestamp = int(time.time())
+        text_path = os.path.join(capture_dir, f"traj_{timestamp}.txt")
+        with open(text_path, "w") as f:
+            f.write("\n\n".join(frames))
+        font = ImageFont.load_default()
+        for idx, frame in enumerate(frames):
+            lines = frame.split("\n")
+            line_height = font.getbbox("A")[3] - font.getbbox("A")[1]
+            width = int(max(font.getlength(l) for l in lines) + 10)
+            height = line_height * len(lines) + 10
+            img = Image.new("RGB", (width, height), "white")
+            draw = ImageDraw.Draw(img)
+            for i, line in enumerate(lines):
+                draw.text((5, i * line_height), line, font=font, fill="black")
+            img.save(os.path.join(capture_dir, f"traj_{timestamp}_{idx}.png"))
     # average total reward per game
     return total_rewards.mean()
 
@@ -80,7 +120,22 @@ def make_env():
     return KlondikeEnv()
 
 
-def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
+def train(
+    total_steps=1000000,
+    num_envs=32,
+    checkpoint_dir="checkpoints",
+    eval_interval=10000,
+    lr=3e-4,
+    batch_size=64,
+    gamma=0.99,
+    epsilon_start=1.0,
+    epsilon_end=0.1,
+    warmup=10000,
+    decay=50000,
+    target_sync=500,
+    prio_alpha=0.6,
+    prio_beta_start=0.4,
+):
     os.makedirs(checkpoint_dir, exist_ok=True)
     plots_dir = "plots"
     os.makedirs(plots_dir, exist_ok=True)
@@ -89,7 +144,6 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
     log_interval = 1000
     tb_interval = 500
     plot_interval = 2000
-    eval_interval = 10000
     num_eval_games = 100
 
     writer = SummaryWriter(log_dir="runs/solitaire")
@@ -100,6 +154,16 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
     agent = DQNAgent(
         sample_env.observation_space.shape[0],
         sample_env.action_space.n,
+        gamma=gamma,
+        epsilon_start=epsilon_start,
+        epsilon_end=epsilon_end,
+        warmup_steps=warmup,
+        decay_steps=decay,
+        lr=lr,
+        batch_size=batch_size,
+        target_sync=target_sync,
+        prio_alpha=prio_alpha,
+        prio_beta_start=prio_beta_start,
     )
     eps_scheduler = AdaptiveEpsilon(agent, decay_factor=0.9, min_eps=0.02, patience=3)
 
@@ -145,10 +209,16 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
         "TensorBoard logging to runs/solitaire - run 'tensorboard --logdir runs/solitaire' to view"
     )
     start_time = time.time()
-    env = SyncVectorEnv([make_env for _ in range(num_envs)])
+    best_eval = -float("inf")
+    env = AsyncVectorEnv([make_env for _ in range(num_envs)])
     state, _ = env.reset()
     recent_reward = 0.0
     avg_r_last = 0.0
+    episode_rewards = np.zeros(num_envs, dtype=float)
+    episode_lengths = np.zeros(num_envs, dtype=int)
+    total_episode_length = 0
+    completed_episodes = 0
+    win_count = 0
 
     for step in trange(
         start_step + 1,
@@ -157,17 +227,17 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
         unit="step",
         leave=True,
     ):
-        legal_lists = [
-            np.flatnonzero(env.envs[i]._legal_mask()).tolist() for i in range(num_envs)
-        ]
+        legal_masks = env.call("_legal_mask")
+        legal_lists = [np.flatnonzero(m).tolist() for m in legal_masks]
         actions = [
             agent.select_action(state[i], legal_lists[i]) for i in range(num_envs)
         ]
         next_state, rewards, dones, truncs, _ = env.step(actions)
         done_flags = np.logical_or(dones, truncs)
-        next_legal_lists = [
-            np.flatnonzero(env.envs[i]._legal_mask()).tolist() for i in range(num_envs)
-        ]
+        episode_rewards += rewards
+        episode_lengths += 1
+        next_masks = env.call("_legal_mask")
+        next_legal_lists = [np.flatnonzero(m).tolist() for m in next_masks]
         masks_next = np.zeros((num_envs, agent.action_dim), dtype=np.float32)
         for i in range(num_envs):
             masks_next[i, next_legal_lists[i]] = 1.0
@@ -180,6 +250,16 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
                 masks_next[i],
             )
         recent_reward += rewards.mean()
+        for i in range(num_envs):
+            if done_flags[i]:
+                completed_episodes += 1
+                total_episode_length += episode_lengths[i]
+                if rewards[i] > 0:
+                    win_count += 1
+                writer.add_scalar("train/episode_length", episode_lengths[i], step)
+                writer.add_scalar("train/win", 1 if rewards[i] > 0 else 0, step)
+                episode_rewards[i] = 0
+                episode_lengths[i] = 0
         loss = None
         if len(agent.replay_buffer) > agent.warmup_steps:
             loss = agent.update()
@@ -197,16 +277,29 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
             writer.add_scalar("train/loss", loss, step)
             writer.add_scalar("train/ε", agent.epsilon, step)
             writer.add_scalar("train/avg_reward", avg_r_last, step)
+            if completed_episodes > 0:
+                writer.add_scalar("train/win_rate", win_count / completed_episodes, step)
+                writer.add_scalar(
+                    "train/avg_episode_length",
+                    total_episode_length / completed_episodes,
+                    step,
+                )
 
         if step % eval_interval == 0:
             old_eps = agent.epsilon
             agent.epsilon = 0.0
             tqdm.write(f"Running evaluation at step {step}...")
-            eval_avg_reward = run_evaluation(agent, num_eval_games)
+            capture = "trajectories" if step == eval_interval else None
+            eval_avg_reward = run_evaluation(agent, num_eval_games, capture_dir=capture)
             writer.add_scalar("eval/avg_reward", eval_avg_reward, step)
             tqdm.write(f">>> Eval @ {step}: avg_reward={eval_avg_reward:.3f}")
             agent.epsilon = old_eps
             eps_scheduler.step(eval_avg_reward)
+            if eval_avg_reward > best_eval:
+                best_eval = eval_avg_reward
+                best_path = os.path.join(checkpoint_dir, "dqn_best.pth")
+                torch.save(agent.q_net.state_dict(), best_path)
+                tqdm.write(f"New best model saved to {best_path}")
 
         if step % plot_interval == 0 and loss is not None:
             steps.append(step)
@@ -241,4 +334,35 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
 
 
 if __name__ == "__main__":
-    train()
+    parser = argparse.ArgumentParser(description="Train DQN agent for Solitaire")
+    parser.add_argument("--steps", type=int, default=1000000, help="Total training steps")
+    parser.add_argument("--envs", type=int, default=32, help="Number of parallel environments")
+    parser.add_argument("--eval-freq", type=int, default=10000, help="Evaluation interval")
+    parser.add_argument("--checkpoint-dir", type=str, default="checkpoints", help="Directory to store checkpoints")
+    parser.add_argument("--lr", type=float, default=3e-4, help="Learning rate")
+    parser.add_argument("--batch-size", type=int, default=64, help="Batch size")
+    parser.add_argument("--gamma", type=float, default=0.99, help="Discount factor")
+    parser.add_argument("--eps-start", type=float, default=1.0, help="Initial epsilon")
+    parser.add_argument("--eps-end", type=float, default=0.1, help="Final epsilon")
+    parser.add_argument("--warmup", type=int, default=10000, help="Warmup steps before decay")
+    parser.add_argument("--decay", type=int, default=50000, help="Steps over which epsilon decays")
+    parser.add_argument("--target-sync", type=int, default=500, help="Target network sync interval")
+    parser.add_argument("--prio-alpha", type=float, default=0.6, help="Prioritized replay alpha")
+    parser.add_argument("--prio-beta", type=float, default=0.4, help="Initial prioritized replay beta")
+    args = parser.parse_args()
+    train(
+        total_steps=args.steps,
+        num_envs=args.envs,
+        checkpoint_dir=args.checkpoint_dir,
+        eval_interval=args.eval_freq,
+        lr=args.lr,
+        batch_size=args.batch_size,
+        gamma=args.gamma,
+        epsilon_start=args.eps_start,
+        epsilon_end=args.eps_end,
+        warmup=args.warmup,
+        decay=args.decay,
+        target_sync=args.target_sync,
+        prio_alpha=args.prio_alpha,
+        prio_beta_start=args.prio_beta,
+    )
