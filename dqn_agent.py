@@ -44,25 +44,36 @@ class ReplayBuffer:
 
 
 class DQNAgent:
-    def __init__(self, state_dim, action_dim, lr=1e-4, gamma=0.99,
-                 epsilon_start=1.0, epsilon_end=0.1, epsilon_decay_steps=100000):
+    def __init__(
+        self,
+        obs_dim,
+        action_dim,
+        gamma=0.99,
+        epsilon_start=1.0,
+        epsilon_end=0.1,
+        warmup_steps=10_000,
+        decay_steps=50_000,
+        lr=3e-4,
+        batch_size=64,
+        target_sync=500,
+    ):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.q_net = QNetwork(state_dim, action_dim).to(self.device)
-        self.target_net = QNetwork(state_dim, action_dim).to(self.device)
+        self.q_net = QNetwork(obs_dim, action_dim).to(self.device)
+        self.target_net = QNetwork(obs_dim, action_dim).to(self.device)
         self.target_net.load_state_dict(self.q_net.state_dict())
         self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=lr)
 
         self.replay_buffer = ReplayBuffer(200000)
-        self.batch_size = 64
+        self.batch_size = batch_size
         self.gamma = gamma
         self.epsilon_start = epsilon_start
         self.epsilon_end = epsilon_end
-        self.epsilon_decay_steps = epsilon_decay_steps
+        self.warmup_steps = warmup_steps
+        self.decay_steps = decay_steps
         self.epsilon = epsilon_start
         self.total_steps = 0
-        self.target_sync = 1000
+        self.target_sync = target_sync
         self.action_dim = action_dim
-        self.update_epsilon()
 
     def select_action(self, state, legal_actions=None, eval=False):
         if legal_actions is None:
@@ -107,10 +118,13 @@ class DQNAgent:
 
         return loss.item()
 
-    def update_epsilon(self):
-        decay_ratio = min(1.0, self.total_steps / self.epsilon_decay_steps)
-        self.epsilon = self.epsilon_start - (self.epsilon_start - self.epsilon_end) * decay_ratio
-
     def step(self):
         self.total_steps += 1
-        self.update_epsilon()
+        t = self.total_steps
+        if t < self.warmup_steps:
+            self.epsilon = self.epsilon_start
+        elif t < self.warmup_steps + self.decay_steps:
+            frac = (t - self.warmup_steps) / self.decay_steps
+            self.epsilon = self.epsilon_start - (self.epsilon_start - self.epsilon_end) * frac
+        else:
+            self.epsilon = self.epsilon_end

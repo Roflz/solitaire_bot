@@ -54,10 +54,14 @@ def run_evaluation(agent, num_games):
 
     while not done_flags.all() and eval_steps < max_eval_steps:
         # always act greedily during eval
-        actions = []
-        for i in range(num_games):
-            legal = list(range(len(eval_env.envs[i]._legal_moves()) + 1))
-            actions.append(agent.select_action(state[i], legal_actions=legal, eval=True))
+        legal_lists = [
+            list(range(len(eval_env.envs[i]._legal_moves()) + 1))
+            for i in range(num_games)
+        ]
+        actions = [
+            agent.select_action(state[i], legal_lists[i], eval=True)
+            for i in range(num_games)
+        ]
         next_state, rewards, dones, truncs, _ = eval_env.step(actions)
 
         # accumulate per-step rewards
@@ -95,7 +99,6 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
     agent = DQNAgent(
         sample_env.observation_space.shape[0],
         sample_env.action_space.n,
-        epsilon_decay_steps=total_steps,
     )
     eps_scheduler = AdaptiveEpsilon(agent, decay_factor=0.9, min_eps=0.02, patience=3)
 
@@ -109,7 +112,15 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
         agent.q_net.load_state_dict(torch.load(path))
         agent.target_net.load_state_dict(agent.q_net.state_dict())
         agent.total_steps = start_step
-        agent.update_epsilon()
+        if agent.total_steps < agent.warmup_steps:
+            agent.epsilon = agent.epsilon_start
+        elif agent.total_steps < agent.warmup_steps + agent.decay_steps:
+            frac = (agent.total_steps - agent.warmup_steps) / agent.decay_steps
+            agent.epsilon = agent.epsilon_start - (
+                agent.epsilon_start - agent.epsilon_end
+            ) * frac
+        else:
+            agent.epsilon = agent.epsilon_end
         print(f"Loaded checkpoint '{path}' (starting from step {start_step})")
 
     print(
@@ -129,16 +140,20 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
         unit="step",
         leave=True,
     ):
-        actions = []
-        for i in range(num_envs):
-            legal = list(range(len(env.envs[i]._legal_moves()) + 1))
-            actions.append(agent.select_action(state[i], legal_actions=legal))
+        legal_lists = [
+            list(range(len(env.envs[i]._legal_moves()) + 1)) for i in range(num_envs)
+        ]
+        actions = [
+            agent.select_action(state[i], legal_lists[i]) for i in range(num_envs)
+        ]
         next_state, rewards, dones, truncs, _ = env.step(actions)
         done_flags = np.logical_or(dones, truncs)
         for i in range(num_envs):
             agent.store_transition(state[i], actions[i], rewards[i], next_state[i], done_flags[i])
         recent_reward += rewards.mean()
-        loss = agent.update()
+        loss = None
+        if len(agent.replay_buffer) > agent.warmup_steps:
+            loss = agent.update()
         agent.step()
         state = next_state
 
