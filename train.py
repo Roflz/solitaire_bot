@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 
 from solitaire_env import KlondikeEnv
 from dqn_agent import DQNAgent
+from PIL import Image, ImageDraw, ImageFont
 
 
 class AdaptiveEpsilon:
@@ -78,9 +79,21 @@ def run_evaluation(agent, num_games, capture_dir=None):
     eval_env.close()
     if capture_dir is not None and frames:
         os.makedirs(capture_dir, exist_ok=True)
-        fname = os.path.join(capture_dir, f"traj_{int(time.time())}.txt")
-        with open(fname, "w") as f:
+        timestamp = int(time.time())
+        text_path = os.path.join(capture_dir, f"traj_{timestamp}.txt")
+        with open(text_path, "w") as f:
             f.write("\n\n".join(frames))
+        font = ImageFont.load_default()
+        for idx, frame in enumerate(frames):
+            lines = frame.split("\n")
+            line_height = font.getbbox("A")[3] - font.getbbox("A")[1]
+            width = int(max(font.getlength(l) for l in lines) + 10)
+            height = line_height * len(lines) + 10
+            img = Image.new("RGB", (width, height), "white")
+            draw = ImageDraw.Draw(img)
+            for i, line in enumerate(lines):
+                draw.text((5, i * line_height), line, font=font, fill="black")
+            img.save(os.path.join(capture_dir, f"traj_{timestamp}_{idx}.png"))
     # average total reward per game
     return total_rewards.mean()
 
@@ -89,7 +102,22 @@ def make_env():
     return KlondikeEnv()
 
 
-def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints", eval_interval=10000):
+def train(
+    total_steps=1000000,
+    num_envs=32,
+    checkpoint_dir="checkpoints",
+    eval_interval=10000,
+    lr=3e-4,
+    batch_size=64,
+    gamma=0.99,
+    epsilon_start=1.0,
+    epsilon_end=0.1,
+    warmup=10000,
+    decay=50000,
+    target_sync=500,
+    prio_alpha=0.6,
+    prio_beta_start=0.4,
+):
     os.makedirs(checkpoint_dir, exist_ok=True)
     plots_dir = "plots"
     os.makedirs(plots_dir, exist_ok=True)
@@ -108,6 +136,16 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints", eval_i
     agent = DQNAgent(
         sample_env.observation_space.shape[0],
         sample_env.action_space.n,
+        gamma=gamma,
+        epsilon_start=epsilon_start,
+        epsilon_end=epsilon_end,
+        warmup_steps=warmup,
+        decay_steps=decay,
+        lr=lr,
+        batch_size=batch_size,
+        target_sync=target_sync,
+        prio_alpha=prio_alpha,
+        prio_beta_start=prio_beta_start,
     )
     eps_scheduler = AdaptiveEpsilon(agent, decay_factor=0.9, min_eps=0.02, patience=3)
 
@@ -285,5 +323,30 @@ if __name__ == "__main__":
     parser.add_argument("--envs", type=int, default=32, help="Number of parallel environments")
     parser.add_argument("--eval-freq", type=int, default=10000, help="Evaluation interval")
     parser.add_argument("--checkpoint-dir", type=str, default="checkpoints", help="Directory to store checkpoints")
+    parser.add_argument("--lr", type=float, default=3e-4, help="Learning rate")
+    parser.add_argument("--batch-size", type=int, default=64, help="Batch size")
+    parser.add_argument("--gamma", type=float, default=0.99, help="Discount factor")
+    parser.add_argument("--eps-start", type=float, default=1.0, help="Initial epsilon")
+    parser.add_argument("--eps-end", type=float, default=0.1, help="Final epsilon")
+    parser.add_argument("--warmup", type=int, default=10000, help="Warmup steps before decay")
+    parser.add_argument("--decay", type=int, default=50000, help="Steps over which epsilon decays")
+    parser.add_argument("--target-sync", type=int, default=500, help="Target network sync interval")
+    parser.add_argument("--prio-alpha", type=float, default=0.6, help="Prioritized replay alpha")
+    parser.add_argument("--prio-beta", type=float, default=0.4, help="Initial prioritized replay beta")
     args = parser.parse_args()
-    train(total_steps=args.steps, num_envs=args.envs, checkpoint_dir=args.checkpoint_dir, eval_interval=args.eval_freq)
+    train(
+        total_steps=args.steps,
+        num_envs=args.envs,
+        checkpoint_dir=args.checkpoint_dir,
+        eval_interval=args.eval_freq,
+        lr=args.lr,
+        batch_size=args.batch_size,
+        gamma=args.gamma,
+        epsilon_start=args.eps_start,
+        epsilon_end=args.eps_end,
+        warmup=args.warmup,
+        decay=args.decay,
+        target_sync=args.target_sync,
+        prio_alpha=args.prio_alpha,
+        prio_beta_start=args.prio_beta,
+    )

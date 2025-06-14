@@ -6,15 +6,15 @@ import math
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class QNetwork(nn.Module):
     def __init__(self, input_dim, output_dim):
         super().__init__()
-        self.feature = nn.Sequential(
-            nn.Linear(input_dim, 512),
-            nn.ReLU(),
-        )
+        self.fc1 = nn.Linear(input_dim, 512)
+        self.fc2 = nn.Linear(512, 512)
+        self.fc3 = nn.Linear(512, 512)
         self.advantage = nn.Sequential(
             nn.Linear(512, 256),
             nn.ReLU(),
@@ -27,7 +27,9 @@ class QNetwork(nn.Module):
         )
 
     def forward(self, x):
-        x = self.feature(x)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x) + x)
+        x = F.relu(self.fc3(x) + x)
         adv = self.advantage(x)
         val = self.value(x)
         return val + adv - adv.mean(dim=1, keepdim=True)
