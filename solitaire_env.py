@@ -57,6 +57,9 @@ class KlondikeEnv(gym.Env):
         self.state = None
         self.face_down_counts = None
         self.no_move_since_recycle = False
+        # Rough upper bound on the number of moves in a single game.
+        # Used by training utilities to cap evaluation length.
+        self.max_moves = 200
 
     # --- Helpers ----------------------------------------------------------
     def _can_play_foundation(self, card):
