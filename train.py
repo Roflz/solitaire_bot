@@ -46,7 +46,7 @@ def run_evaluation(agent, num_games):
     state, _ = eval_env.reset()
     # track cumulative reward for each parallel game
     total_rewards = np.zeros(num_games, dtype=float)
-    done_flags    = np.zeros(num_games, dtype=bool)
+    done_flags = np.zeros(num_games, dtype=bool)
 
     # cap to avoid infinite loops if games never terminate
     max_eval_steps = KlondikeEnv().max_moves * 5
@@ -75,6 +75,7 @@ def run_evaluation(agent, num_games):
     # average total reward per game
     return total_rewards.mean()
 
+
 def make_env():
     return KlondikeEnv()
 
@@ -102,7 +103,11 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
     )
     eps_scheduler = AdaptiveEpsilon(agent, decay_factor=0.9, min_eps=0.02, patience=3)
 
-    ckpts = [f for f in os.listdir(checkpoint_dir) if f.startswith("dqn_") and f.endswith(".pth")]
+    ckpts = [
+        f
+        for f in os.listdir(checkpoint_dir)
+        if f.startswith("dqn_") and f.endswith(".pth")
+    ]
     start_step = 0
     if ckpts:
         ckpts.sort(key=lambda x: int(x.split("_")[1].split(".")[0]))
@@ -116,9 +121,9 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
             agent.epsilon = agent.epsilon_start
         elif agent.total_steps < agent.warmup_steps + agent.decay_steps:
             frac = (agent.total_steps - agent.warmup_steps) / agent.decay_steps
-            agent.epsilon = agent.epsilon_start - (
-                agent.epsilon_start - agent.epsilon_end
-            ) * frac
+            agent.epsilon = (
+                agent.epsilon_start - (agent.epsilon_start - agent.epsilon_end) * frac
+            )
         else:
             agent.epsilon = agent.epsilon_end
         print(f"Loaded checkpoint '{path}' (starting from step {start_step})")
@@ -126,7 +131,9 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
     print(
         f"Starting training: total_steps={total_steps}, num_envs={num_envs}, device={agent.device}"
     )
-    print("TensorBoard logging to runs/solitaire - run 'tensorboard --logdir runs/solitaire' to view")
+    print(
+        "TensorBoard logging to runs/solitaire - run 'tensorboard --logdir runs/solitaire' to view"
+    )
     start_time = time.time()
     env = SyncVectorEnv([make_env for _ in range(num_envs)])
     state, _ = env.reset()
@@ -148,13 +155,25 @@ def train(total_steps=1000000, num_envs=32, checkpoint_dir="checkpoints"):
         ]
         next_state, rewards, dones, truncs, _ = env.step(actions)
         done_flags = np.logical_or(dones, truncs)
+        next_legal_lists = [
+            list(range(len(env.envs[i]._legal_moves()) + 1)) for i in range(num_envs)
+        ]
+        masks_next = np.zeros((num_envs, agent.action_dim), dtype=np.float32)
         for i in range(num_envs):
-            agent.store_transition(state[i], actions[i], rewards[i], next_state[i], done_flags[i])
+            masks_next[i, next_legal_lists[i]] = 1.0
+            agent.store_transition(
+                state[i],
+                actions[i],
+                rewards[i],
+                next_state[i],
+                done_flags[i],
+                masks_next[i],
+            )
         recent_reward += rewards.mean()
         loss = None
         if len(agent.replay_buffer) > agent.warmup_steps:
             loss = agent.update()
-        agent.step()
+        agent.step(num_envs)
         state = next_state
 
         if step % log_interval == 0 and loss is not None:
