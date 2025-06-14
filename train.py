@@ -3,7 +3,7 @@ import time
 import argparse
 import numpy as np
 import torch
-from gym.vector import SyncVectorEnv, SubprocVectorEnv
+from gym.vector import SyncVectorEnv, AsyncVectorEnv
 from tqdm import trange, tqdm
 from torch.utils.tensorboard import SummaryWriter
 import matplotlib.pyplot as plt
@@ -44,7 +44,7 @@ class AdaptiveEpsilon:
 def run_evaluation(agent, num_games, capture_dir=None):
     # create num_games parallel envs
     if capture_dir is None:
-        eval_env = SubprocVectorEnv([make_env for _ in range(num_games)])
+        eval_env = AsyncVectorEnv([make_env for _ in range(num_games)])
     else:
         eval_env = SyncVectorEnv([make_env for _ in range(num_games)])
 
@@ -192,7 +192,7 @@ def train(
     )
     start_time = time.time()
     best_eval = -float("inf")
-    env = SubprocVectorEnv([make_env for _ in range(num_envs)])
+    env = AsyncVectorEnv([make_env for _ in range(num_envs)])
     state, _ = env.reset()
     recent_reward = 0.0
     avg_r_last = 0.0
