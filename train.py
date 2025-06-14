@@ -5,7 +5,23 @@ import numpy as np
 import torch
 from gym.vector import SyncVectorEnv, AsyncVectorEnv
 from tqdm import trange, tqdm
-from torch.utils.tensorboard import SummaryWriter
+try:
+    from torch.utils.tensorboard import SummaryWriter
+except Exception as e:  # pragma: no cover - optional dependency
+    print(f"TensorBoard logging disabled: {e}")
+
+    class SummaryWriter:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def add_scalar(self, *args, **kwargs):
+            pass
+
+        def close(self):
+            pass
+
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from solitaire_env import KlondikeEnv
